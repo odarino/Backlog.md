@@ -9,6 +9,7 @@ interface ModalProps {
 	disableEscapeClose?: boolean; // when true, Escape and backdrop click won't close (child can handle it)
 	actions?: React.ReactNode; // optional actions rendered in header before close
 	initialFocusRef?: React.RefObject<HTMLElement | null>;
+	suspendKeyHandling?: boolean; // when true, the document key handler steps aside (e.g. a lightbox is open)
 }
 
 const Modal: React.FC<ModalProps> = ({
@@ -20,6 +21,7 @@ const Modal: React.FC<ModalProps> = ({
 	disableEscapeClose,
 	actions,
 	initialFocusRef,
+	suspendKeyHandling,
 }) => {
 	const dialogRef = useRef<HTMLDivElement | null>(null);
 	const onCloseRef = useRef(onClose);
@@ -28,6 +30,8 @@ const Modal: React.FC<ModalProps> = ({
 	onCloseRef.current = onClose;
 	disableEscapeCloseRef.current = disableEscapeClose;
 	initialFocusRefRef.current = initialFocusRef;
+	const suspendKeyHandlingRef = useRef(suspendKeyHandling);
+	suspendKeyHandlingRef.current = suspendKeyHandling;
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -44,6 +48,9 @@ const Modal: React.FC<ModalProps> = ({
 		const previouslyFocused = activeElement && "focus" in activeElement ? (activeElement as HTMLElement) : null;
 		const previousOverflow = ownerDocument.body.style.overflow;
 		const handleKeyDown = (event: KeyboardEvent) => {
+			if (suspendKeyHandlingRef.current) {
+				return;
+			}
 			if (event.key === "Escape") {
 				event.preventDefault();
 				event.stopPropagation();
