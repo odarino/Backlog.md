@@ -8,6 +8,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import MDEditor from "@uiw/react-md-editor";
 import AcceptanceCriteriaEditor from "./AcceptanceCriteriaEditor";
 import MermaidMarkdown from './MermaidMarkdown';
+import ImageZoomScope from './ImageZoomScope';
 import ChipInput from "./ChipInput";
 import DependencyInput from "./DependencyInput";
 import { DependencyGraphSection } from "./DependencyGraphSection";
@@ -214,6 +215,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
   const formBaselineRef = useRef<TaskDetailsFormState | null>(null);
   const activeDemotionRequest = useRef<{ identity: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [demoting, setDemoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1135,6 +1137,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
       title={isCreateMode ? (isDraftMode ? "Create New Draft" : "Create New Task") : `${displayId} — ${task.title}`}
       maxWidthClass="max-w-5xl"
       disableEscapeClose={mode === "edit" || mode === "create" || demoting}
+      suspendKeyHandling={lightboxOpen}
       actions={
 		<div className="flex flex-nowrap items-center justify-end gap-2">
 		          {isFinalStatus && mode === "preview" && !isCreateMode && !isFromOtherBranch && (
@@ -1205,6 +1208,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
         </div>
       }
     >
+      <ImageZoomScope className="contents" onOpenChange={setLightboxOpen}>
       {error && (
         <div role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</div>
       )}
@@ -1948,6 +1952,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
         </div>
 	      </div>
 		</fieldset>
+      </ImageZoomScope>
     </Modal>
   );
 };

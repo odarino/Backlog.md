@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, isAmbiguousIdConflict } from '../lib/api';
 import MDEditor from '@uiw/react-md-editor';
 import MermaidMarkdown from './MermaidMarkdown';
+import ImageZoomScope from './ImageZoomScope';
 import { type Decision } from '../../types';
 import AmbiguousIdNotice from './AmbiguousIdNotice';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -33,7 +34,9 @@ const MarkdownEditor = memo(function MarkdownEditor({
 		// Preview mode - just show the rendered markdown without editor UI
 			return (
 				<div className="prose prose-sm !max-w-none w-full p-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden" data-color-mode={theme}>
-					<MermaidMarkdown source={value} />
+					<ImageZoomScope>
+						<MermaidMarkdown source={value} />
+					</ImageZoomScope>
 				</div>
 			);
 	}
