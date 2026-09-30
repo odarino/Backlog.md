@@ -42,13 +42,13 @@ Each phase gets its own implementation plan and is mergeable alone.
 - Esc or a click on the backdrop closes it. Arrow keys go to the next/previous image.
 - No helper text or subtitles (project UI rule).
 
-**Hook-in:** `src/web/components/MermaidMarkdown.tsx`
+**Hook-in:** `src/web/components/ImageZoomScope.tsx`
 
-- A delegated `click` handler on the wrapper `div` opens the lightbox when the target is an `<img>`.
-- Slides = every `<img>` inside the closest modal container, in DOM order. Navigation therefore crosses description, plan, notes and final summary.
-- Images get `cursor: zoom-in`.
-- The MDEditor live preview pane in edit mode uses the same handler. Clicks in the textarea do nothing.
-- `DocumentationDetail` and `DecisionDetail` use `MermaidMarkdown` and get zoom with no extra code.
+- A wrapper component with one delegated `click` handler. A click on an `<img>` inside `.wmde-markdown` (and not inside a link) opens the lightbox.
+- Slides = every such image inside the scope, in DOM order. In the task modal the scope wraps the whole modal body, so navigation crosses description, plan, notes and final summary, and it also covers the MDEditor live/preview pane in edit mode (edit mode uses `preview="edit"`, whose preview pane does not use `MermaidMarkdown`).
+- Images get `cursor: zoom-in`. Images inside links keep their link behavior.
+- `Modal` gets `suspendKeyHandling?: boolean`. While the lightbox is open, the task modal's document-level Escape/Tab handler steps aside, so Escape closes only the lightbox.
+- `DocumentationDetail` and `DecisionDetail` wrap their view-mode markdown in the same scope.
 
 **Tests:** unit test for image collection order (pure function over a DOM fragment).
 
