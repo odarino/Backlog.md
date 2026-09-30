@@ -31,7 +31,7 @@ const MarkdownEditor = memo(function MarkdownEditor({
                 className="prose prose-sm !max-w-none w-full p-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
                 data-color-mode={theme}>
                 <ImageZoomScope>
-                  <MermaidMarkdown source={value} />
+                    <MermaidMarkdown source={value} />
                 </ImageZoomScope>
             </div>
         );

@@ -12,7 +12,10 @@ interface Props {
 export default function ImageLightbox({ slides, index, onClose }: Props) {
 	const single = slides.length <= 1;
 	return (
-		<Lightbox
+		// Portal events bubble through React ancestors; stopping here keeps lightbox keys from document listeners.
+		// biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only stops key events from leaving the lightbox.
+		<div className="contents" onKeyDown={(event) => event.stopPropagation()}>
+			<Lightbox
 			open={index !== null}
 			index={index ?? 0}
 			close={onClose}
@@ -25,6 +28,7 @@ export default function ImageLightbox({ slides, index, onClose }: Props) {
 				buttonPrev: single ? () => null : undefined,
 				buttonNext: single ? () => null : undefined,
 			}}
-		/>
+			/>
+		</div>
 	);
 }
