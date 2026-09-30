@@ -85,8 +85,8 @@ Prove that a compiled binary (`bun run build`) loads the embedded WASM codecs an
 - Limit: 25 MB, else `413`.
 - The type comes from magic bytes. Unsupported type: `415`.
 - Processing:
-  1. GIF and SVG: saved unchanged.
-  2. JPEG, PNG, WebP, AVIF: decode, apply EXIF orientation (small EXIF reader, JPEG only), resize so the longest side is at most `image_max_dimension`, encode WebP at `image_quality`. If the result is not smaller than the input, keep the original bytes and extension.
+  1. GIF, SVG and AVIF: saved unchanged.
+  2. JPEG, PNG, WebP: decode (JPEG with `preserveOrientation: true`, which applies the EXIF orientation), resize so the longest side is at most `image_max_dimension`, encode WebP at `image_quality`. If the result is not smaller than the input, keep the original bytes and extension. AVIF is saved unchanged, like GIF and SVG (its decoder is 1.2 MB of WASM and AVIF is already compact).
 - File name: slug of the original name (`My Shot.png` becomes `my-shot`) plus the final extension. On collision add `-1`, `-2`, … Pasted images without a name use `paste-YYYYMMDD-HHmmss`.
 - Target: `backlog/assets/images/<taskId>/` or `backlog/assets/images/_unsorted/`. The path check reuses the traversal guard from `handleAssetRequest`.
 - Write to a temp file in the target folder, then rename. No partial files on failure.
@@ -108,13 +108,13 @@ New `BacklogConfig` keys, parsed and serialized in `src/file-system/operations.t
 
 ### `_unsorted` move on task create
 
-After a task create succeeds, core scans the task's markdown fields for links to `/assets/images/_unsorted/…`. Each linked file moves to `images/<newId>/` (name collision rules apply), and the links are rewritten in one task update. If another task or draft also links to the same `_unsorted` file, the file is copied instead of moved.
+After a task create succeeds (in the server create handler, right after `createTaskFromInput`), core scans the task's markdown fields for links to `/assets/images/_unsorted/…`. Each linked file moves to `images/<newId>/` (name collision rules apply), and the links are rewritten in one task update. If another task or draft also links to the same `_unsorted` file, the file is copied instead of moved.
 
 Drafts use their own ID as the folder (`images/draft-3/`). When a draft is promoted to a task, the files stay where they are and the links stay valid. No move happens on promotion.
 
 ### Tests
 
-- Core: JPEG fixture becomes a smaller WebP; JPEG with EXIF orientation 6 is rotated; GIF passes through unchanged; output that is not smaller keeps the original; corrupt file raises an error and leaves no file; name collision suffixes; path traversal rejected; `_unsorted` move rewrites links and copies shared files.
+- Core: JPEG fixture becomes a smaller WebP; JPEG with EXIF orientation 6 is rotated; GIF, SVG and AVIF pass through unchanged; output that is not smaller keeps the original; corrupt file raises an error and leaves no file; name collision suffixes; path traversal rejected; `_unsorted` move rewrites links and copies shared files.
 - Server: one route test per status code (200, 413, 415, 422).
 - Compiled binary: smoke test compresses one fixture.
 
