@@ -216,6 +216,8 @@ export const TaskDetailsModal: React.FC<Props> = ({
   const activeDemotionRequest = useRef<{ identity: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const lightboxOpenRef = useRef(false);
+  lightboxOpenRef.current = lightboxOpen;
   const [demoting, setDemoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -494,6 +496,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
   // Intercept Escape to cancel edit (not close modal) when in edit mode
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (lightboxOpenRef.current) return;
       if (mode === "edit" && (e.key === "Escape")) {
         e.preventDefault();
         e.stopPropagation();
