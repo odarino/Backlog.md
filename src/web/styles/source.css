@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import '@uiw/react-md-editor/markdown-editor.css';
 @import '@uiw/react-markdown-preview/markdown.css';
+@import 'yet-another-react-lightbox/styles.css';
+@import 'yet-another-react-lightbox/plugins/counter.css';
 
 @source not inline("{rounded-full}");
 
@@ -265,4 +267,12 @@
     .w-md-editor textarea {
         resize: none !important;
     }
+}
+
+.image-zoom-scope .wmde-markdown img {
+    cursor: zoom-in;
+}
+
+.image-zoom-scope .wmde-markdown a img {
+    cursor: pointer;
 }
