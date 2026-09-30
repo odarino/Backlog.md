@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useState } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { collectZoomSlides, isZoomableImage, type ZoomSlide } from "../lib/image-zoom";
 import ImageLightbox from "./ImageLightbox";
 
@@ -11,6 +11,17 @@ interface Props {
 export default function ImageZoomScope({ children, className, onOpenChange }: Props) {
 	const [slides, setSlides] = useState<ZoomSlide[]>([]);
 	const [index, setIndex] = useState<number | null>(null);
+	const onOpenChangeRef = useRef(onOpenChange);
+	const openRef = useRef(false);
+	onOpenChangeRef.current = onOpenChange;
+
+	// Parents keep state for the open lightbox; tell them it closed if this scope unmounts first.
+	useEffect(
+		() => () => {
+			if (openRef.current) onOpenChangeRef.current?.(false);
+		},
+		[],
+	);
 
 	const handleClick = (event: MouseEvent<HTMLDivElement>) => {
 		// The lightbox portal bubbles React events through this div; its own images are not inside .wmde-markdown.
@@ -19,11 +30,13 @@ export default function ImageZoomScope({ children, className, onOpenChange }: Pr
 		const result = collectZoomSlides(event.currentTarget, event.target);
 		setSlides(result.slides);
 		setIndex(result.index);
+		openRef.current = true;
 		onOpenChange?.(true);
 	};
 
 	const handleClose = () => {
 		setIndex(null);
+		openRef.current = false;
 		onOpenChange?.(false);
 	};
 

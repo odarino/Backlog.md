@@ -115,4 +115,30 @@ describe("ImageZoomScope", () => {
 
 		expect(changes).toEqual([true, false]);
 	});
+
+	it("reports closed when the scope unmounts while the lightbox is open", async () => {
+		const changes: boolean[] = [];
+		await renderScope((open) => changes.push(open));
+		await click(document.getElementById("first"));
+		expect(changes).toEqual([true]);
+
+		await act(async () => {
+			activeRoot?.unmount();
+		});
+		activeRoot = null;
+
+		expect(changes).toEqual([true, false]);
+	});
+
+	it("reports nothing when the scope unmounts without opening", async () => {
+		const changes: boolean[] = [];
+		await renderScope((open) => changes.push(open));
+
+		await act(async () => {
+			activeRoot?.unmount();
+		});
+		activeRoot = null;
+
+		expect(changes).toEqual([]);
+	});
 });
