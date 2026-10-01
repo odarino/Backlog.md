@@ -17,11 +17,13 @@ import {
 	validateStatusColors,
 	validateStatusList,
 	WorkflowError,
+	withWorkflowLock,
 } from "../core/workflow.ts";
 import { isCreateLockError, isTaskLockError } from "../file-system/operations.ts";
 import { BacklogToolError } from "../mcp/errors/mcp-errors.ts";
 import { MilestoneHandlers } from "../mcp/tools/milestones/handlers.ts";
 import {
+	type BacklogConfig,
 	DOCUMENT_TYPE_VALUES,
 	type Document,
 	type SearchPriorityFilter,
@@ -1442,7 +1444,7 @@ export class BacklogServer {
 			if (typeof from !== "string" || typeof to !== "string") {
 				throw new WorkflowError("from and to must be strings", 400);
 			}
-			return await this.finishWorkflowChange(await renameStatus(this.core, from, to));
+			return this.finishWorkflowChange(await renameStatus(this.core, from, to));
 		});
 	}
 
@@ -1453,11 +1455,11 @@ export class BacklogServer {
 			if (typeof status !== "string" || (moveTo !== undefined && typeof moveTo !== "string")) {
 				throw new WorkflowError("status must be a string and moveTo a string", 400);
 			}
-			return await this.finishWorkflowChange(await removeStatus(this.core, status, moveTo));
+			return this.finishWorkflowChange(await removeStatus(this.core, status, moveTo));
 		});
 	}
 
-	private async finishWorkflowChange(result: { config: unknown; changedTasks: number }): Promise<Response> {
+	private finishWorkflowChange(result: { config: BacklogConfig; changedTasks: number }): Response {
 		this.broadcastDataUpdated("tasks");
 		this.broadcastConfigUpdated();
 		return Response.json(result);
@@ -1469,6 +1471,7 @@ export class BacklogServer {
 		} catch (error) {
 			if (error instanceof WorkflowError) return Response.json({ error: error.message }, { status: error.status });
 			if (error instanceof BacklogToolError) return Response.json({ error: error.message }, { status: 400 });
+			if (isTaskLockError(error)) return Response.json({ error: error.message }, { status: 409 });
 			console.error("Error changing workflow:", error);
 			return Response.json({ error: "Failed to change workflow" }, { status: 500 });
 		}
@@ -1715,33 +1718,52 @@ export class BacklogServer {
 				return Response.json({ error: "Image quality must be between 0.1 and 1" }, { status: 400 });
 			}
 
-			// Existing statuses change only through rename or remove; this route may reorder and add.
-			const current = await this.core.filesystem.loadConfig();
-			const currentStatuses = current?.statuses ?? [];
-			if (updatedConfig.statuses !== undefined) {
-				if (
-					!Array.isArray(updatedConfig.statuses) ||
-					updatedConfig.statuses.some((s: unknown) => typeof s !== "string")
-				) {
-					return Response.json({ error: "Statuses must be a list of names" }, { status: 400 });
-				}
-				updatedConfig.statuses = validateStatusList(updatedConfig.statuses);
-				const next = new Set<string>(updatedConfig.statuses);
-				if (currentStatuses.some((status) => !next.has(status))) {
-					return Response.json({ error: "Use rename or remove to change existing statuses" }, { status: 409 });
-				}
+			if (
+				updatedConfig.statusColors !== undefined &&
+				(updatedConfig.statusColors === null ||
+					typeof updatedConfig.statusColors !== "object" ||
+					Array.isArray(updatedConfig.statusColors))
+			) {
+				return Response.json({ error: "statusColors must be an object" }, { status: 400 });
 			}
-			const statuses: string[] = updatedConfig.statuses ?? currentStatuses;
-			updatedConfig.statuses = statuses;
-			if (updatedConfig.defaultStatus && !statuses.includes(updatedConfig.defaultStatus)) {
-				return Response.json({ error: "Default status must be one of the statuses" }, { status: 400 });
-			}
-			if (updatedConfig.statusColors !== undefined) {
-				updatedConfig.statusColors = validateStatusColors(updatedConfig.statusColors, statuses);
+			if (
+				updatedConfig.statuses !== undefined &&
+				(!Array.isArray(updatedConfig.statuses) || updatedConfig.statuses.some((s: unknown) => typeof s !== "string"))
+			) {
+				return Response.json({ error: "Statuses must be a list of names" }, { status: 400 });
 			}
 
-			// Save configuration
-			await this.core.filesystem.saveConfig(updatedConfig);
+			// Read, check, and save under the workflow lock so a rename or remove cannot interleave.
+			const failure = await withWorkflowLock(async () => {
+				this.core.filesystem.invalidateConfigCache();
+				const current = await this.core.filesystem.loadConfig();
+				const currentStatuses = current?.statuses ?? [];
+				// Existing statuses change only through rename or remove; this route may reorder and add.
+				if (updatedConfig.statuses !== undefined) {
+					updatedConfig.statuses = validateStatusList(updatedConfig.statuses);
+					const next = new Set<string>(updatedConfig.statuses);
+					if (currentStatuses.some((status) => !next.has(status))) {
+						return Response.json({ error: "Use rename or remove to change existing statuses" }, { status: 409 });
+					}
+				}
+				const statuses: string[] = updatedConfig.statuses ?? currentStatuses;
+				updatedConfig.statuses = statuses;
+				if (updatedConfig.defaultStatus === undefined && current?.defaultStatus) {
+					updatedConfig.defaultStatus = current.defaultStatus;
+				}
+				if (updatedConfig.defaultStatus && !statuses.includes(updatedConfig.defaultStatus)) {
+					return Response.json({ error: "Default status must be one of the statuses" }, { status: 400 });
+				}
+				if (updatedConfig.statusColors === undefined && current?.statusColors) {
+					updatedConfig.statusColors = current.statusColors;
+				}
+				if (updatedConfig.statusColors !== undefined) {
+					updatedConfig.statusColors = validateStatusColors(updatedConfig.statusColors, statuses);
+				}
+				await this.core.filesystem.saveConfig(updatedConfig);
+				return undefined;
+			});
+			if (failure) return failure;
 
 			// Update local project name if changed
 			if (updatedConfig.projectName !== this.projectName) {
