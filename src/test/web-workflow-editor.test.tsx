@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import WorkflowEditor from "../web/components/WorkflowEditor";
-import { apiClient } from "../web/lib/api";
+import { ApiError, apiClient } from "../web/lib/api";
 import type { BacklogConfig } from "../types";
 
 let activeRoot: Root | null = null;
@@ -79,7 +79,7 @@ const tick = () =>
 		await new Promise((resolve) => window.setTimeout(resolve, 0));
 	});
 
-const renderEditor = async (onSaved: (result: { error?: string }) => void = () => {}) => {
+const renderEditor = async (onSaved: (result: { error?: string; config?: BacklogConfig }) => void = () => {}) => {
 	setupDom();
 	const container = document.getElementById("root") as HTMLElement;
 	activeRoot = createRoot(container);
@@ -134,7 +134,7 @@ describe("WorkflowEditor", () => {
 	});
 
 	it("renames and reorders, then saves in order", async () => {
-		const saved: Array<{ error?: string }> = [];
+		const saved: Array<{ error?: string; config?: BacklogConfig }> = [];
 		await renderEditor((result) => {
 			saved.push(result);
 		});
@@ -148,7 +148,10 @@ describe("WorkflowEditor", () => {
 			["rename", "Review", "QA"],
 			["update", ["To Do", "QA", "In Progress", "Done"], {}],
 		]);
-		expect(saved).toEqual([{}]);
+		// The saved config from the last update goes to the parent, so it does not need to fetch again.
+		expect(saved).toHaveLength(1);
+		expect(saved[0]?.error).toBeUndefined();
+		expect(saved[0]?.config?.statuses).toEqual(["To Do", "QA", "In Progress", "Done"]);
 	});
 
 	it("sends the full status colors on save", async () => {
@@ -159,10 +162,12 @@ describe("WorkflowEditor", () => {
 		expect(calls).toEqual([["update", ["To Do", "In Progress", "Review", "Done"], { "To Do": "#ff0000" }]]);
 	});
 
-	it("deletes an unused status at once", async () => {
+	it("deletes an unused status at once and focuses the add input", async () => {
 		await renderEditor();
+		byLabel("Delete In Progress").focus();
 		await click(byLabel("Delete In Progress"));
 		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		expect(document.activeElement).toBe(byLabel("New status"));
 		expect(names()).toEqual(["To Do", "Review", "Done"]);
 		await click(save());
 		await tick();
@@ -192,6 +197,28 @@ describe("WorkflowEditor", () => {
 		expect(calls).toEqual([["update", ["To Do", "In Progress", "Review", "Blocked", "Done"], {}]]);
 	});
 
+	it("moves focus to the other Move button when a row reaches an end", async () => {
+		await renderEditor();
+		byLabel("Move In Progress up").focus();
+		await click(byLabel("Move In Progress up"));
+		expect(names()).toEqual(["In Progress", "To Do", "Review", "Done"]);
+		expect(document.activeElement).toBe(byLabel("Move In Progress down"));
+		byLabel("Move Review down").focus();
+		await click(byLabel("Move Review down"));
+		expect(names()).toEqual(["In Progress", "To Do", "Done", "Review"]);
+		expect(document.activeElement).toBe(byLabel("Move Review up"));
+	});
+
+	it("shows the usage error and the validation text together", async () => {
+		apiClient.fetchStatusUsage = async () => {
+			throw new Error("Usage failed");
+		};
+		await renderEditor();
+		await typeInto(nameInputs()[0] as HTMLInputElement, "");
+		const lines = Array.from(document.querySelectorAll('[role="alert"] > *')).map((line) => line.textContent);
+		expect(lines).toEqual(["Usage failed", "Status name is required"]);
+	});
+
 	it("shows validation text for an empty name and disables save", async () => {
 		await renderEditor();
 		await typeInto(nameInputs()[0] as HTMLInputElement, "");
@@ -201,7 +228,7 @@ describe("WorkflowEditor", () => {
 
 	it("keeps the rows and skips the reload when the first call fails", async () => {
 		let saved = 0;
-		renameError = new Error("Status already exists: Done");
+		renameError = new ApiError("Status already exists: Done", 409);
 		await renderEditor(() => {
 			saved += 1;
 		});
@@ -212,6 +239,18 @@ describe("WorkflowEditor", () => {
 		expect(saved).toBe(0);
 		expect(names()[2]).toBe("QA");
 		expect(calls.some((call) => call[0] === "update")).toBe(false);
+	});
+
+	it("reports a server error on the first call through onSaved, because it can be a partial change", async () => {
+		const saved: Array<{ error?: string }> = [];
+		renameError = new ApiError("Workflow changed but the commit failed: commit failed", 500);
+		await renderEditor((result) => {
+			saved.push(result);
+		});
+		await typeInto(nameInputs()[2] as HTMLInputElement, "QA");
+		await click(save());
+		await tick();
+		expect(saved).toEqual([{ error: "Workflow changed but the commit failed: commit failed" }]);
 	});
 
 	it("reports a partial failure through onSaved", async () => {
@@ -245,7 +284,7 @@ describe("WorkflowEditor", () => {
 		await click(save());
 		await tick();
 		expect(calls).toEqual([
-			["update", ["To Do", "In Progress", "Review", "Done", "Blocked"], undefined],
+			["update", ["To Do", "In Progress", "Review", "Blocked", "Done"], undefined],
 			["remove", "In Progress", undefined],
 			["update", ["To Do", "Review", "Blocked", "Done"], {}],
 		]);

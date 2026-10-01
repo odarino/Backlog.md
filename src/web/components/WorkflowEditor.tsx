@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { BacklogConfig } from "../../types";
-import { apiClient } from "../lib/api";
+import { ApiError, apiClient } from "../lib/api";
 import {
 	buildWorkflowPlan,
 	hasWorkflowChanges,
@@ -15,8 +15,11 @@ import Modal from "./Modal";
 
 interface WorkflowEditorProps {
 	config: BacklogConfig;
-	onSaved: (result: { error?: string }) => void;
+	/** `config` is the saved config after a full save; after an error the parent must reload. */
+	onSaved: (result: { error?: string; config?: BacklogConfig }) => void;
 }
+
+type MoveDirection = "up" | "down";
 
 const DEFAULT_COLOR = "#94a3b8";
 
@@ -40,6 +43,8 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 	const focusAddAfterClose = useRef(false);
 	const nextId = useRef(1);
 	const dragIndex = useRef<number | null>(null);
+	const moveButtons = useRef(new Map<string, HTMLButtonElement>());
+	const focusAfterMove = useRef<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -65,6 +70,13 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 		}
 	}, [pendingDelete]);
 
+	useEffect(() => {
+		const key = focusAfterMove.current;
+		if (key === null) return;
+		focusAfterMove.current = null;
+		moveButtons.current.get(key)?.focus();
+	}, [rows]);
+
 	const edit = (next: WorkflowRow[]) => {
 		setRows(next);
 		setError(null);
@@ -84,6 +96,21 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 			from += delta;
 		}
 		edit(next);
+	};
+
+	// A Move button that becomes disabled at an end loses focus, so focus goes to the other one of the row.
+	const handleMove = (row: WorkflowRow, index: number, direction: MoveDirection) => {
+		const target = direction === "up" ? index - 1 : index + 1;
+		if (target === 0 || target === rows.length - 1) {
+			focusAfterMove.current = `${row.id}:${direction === "up" ? "down" : "up"}`;
+		}
+		edit(moveRow(rows, index, direction === "up" ? -1 : 1));
+	};
+
+	const moveButtonRef = (row: WorkflowRow, direction: MoveDirection) => (element: HTMLButtonElement | null) => {
+		const key = `${row.id}:${direction}`;
+		if (element) moveButtons.current.set(key, element);
+		else moveButtons.current.delete(key);
 	};
 
 	const handleAdd = () => {
@@ -120,6 +147,8 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 		const count = row.original === null ? 0 : effectiveUsage(row.original);
 		if (count === 0) {
 			removeRow(row, null);
+			// The row and its Delete button are gone; keep focus in the editor.
+			addInputRef.current?.focus();
 			return;
 		}
 		setMoveTo(moveTargets(row)[0] ?? "");
@@ -135,7 +164,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 
 	const validation = validateRows(rows);
 	const changed = hasWorkflowChanges(config.statuses, config.statusColors, rows, removals);
-	const message = error ?? usageError ?? validation;
+	const messages = [...new Set([error, usageError, validation])].filter((line): line is string => line !== null);
 
 	const handleSave = async () => {
 		const plan = buildWorkflowPlan(config.statuses, rows, removals);
@@ -149,7 +178,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 		try {
 			if (plan.preAdd) {
 				const current = await apiClient.fetchConfig();
-				await apiClient.updateConfig({ ...current, statuses: [...config.statuses, ...plan.preAdd] });
+				// The terminal status stays last, so no task changes meaning while the save runs.
+				const saved = config.statuses;
+				await apiClient.updateConfig({
+					...current,
+					statuses: [...saved.slice(0, -1), ...plan.preAdd, ...saved.slice(-1)],
+				});
 				applied += 1;
 			}
 			for (const removal of plan.removals) {
@@ -161,12 +195,18 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 				applied += 1;
 			}
 			const fresh = await apiClient.fetchConfig();
-			await apiClient.updateConfig({ ...fresh, statuses: plan.statuses, statusColors: plan.statusColors });
-			onSaved({});
+			const saved = await apiClient.updateConfig({
+				...fresh,
+				statuses: plan.statuses,
+				statusColors: plan.statusColors,
+			});
+			onSaved({ config: saved });
 		} catch (err) {
 			const text = err instanceof Error ? err.message : "Failed to save workflow";
-			// Nothing changed on the server yet: keep the user's rows and show the error here.
-			if (applied === 0) setError(text);
+			// Only a 400 or 409 on the first call proves that nothing changed on the server. Then keep
+			// the user's rows and show the error here; after any other error the parent reloads.
+			const rejected = err instanceof ApiError && (err.status === 400 || err.status === 409);
+			if (applied === 0 && rejected) setError(text);
 			else onSaved({ error: text });
 		} finally {
 			setSaving(false);
@@ -207,18 +247,20 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 						</span>
 						<button
 							type="button"
+							ref={moveButtonRef(row, "up")}
 							aria-label={`Move ${row.name} up`}
 							disabled={index === 0}
-							onClick={() => edit(moveRow(rows, index, -1))}
+							onClick={() => handleMove(row, index, "up")}
 							className={iconButton}
 						>
 							↑
 						</button>
 						<button
 							type="button"
+							ref={moveButtonRef(row, "down")}
 							aria-label={`Move ${row.name} down`}
 							disabled={index === rows.length - 1}
-							onClick={() => edit(moveRow(rows, index, 1))}
+							onClick={() => handleMove(row, index, "down")}
 							className={iconButton}
 						>
 							↓
@@ -281,10 +323,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 				</button>
 			</div>
 
-			{message && (
-				<p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
-					{message}
-				</p>
+			{messages.length > 0 && (
+				<div role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+					{messages.map((line) => (
+						<p key={line}>{line}</p>
+					))}
+				</div>
 			)}
 
 			<div className="mt-4 flex justify-end">
