@@ -159,6 +159,27 @@ describe("TaskMarkdownEditor uploads", () => {
 		);
 	});
 
+	it("prevents a drop of files that are not images and uploads nothing", async () => {
+		let uploads = 0;
+		apiClient.uploadAsset = async () => {
+			uploads += 1;
+			throw new Error("should not upload");
+		};
+		const values: string[] = [];
+		const { textarea } = await renderEditor((value) => values.push(value));
+		const drop = new window.Event("drop", { bubbles: true, cancelable: true });
+		Object.defineProperty(drop, "dataTransfer", {
+			value: { files: [new File(["%PDF"], "spec.pdf", { type: "application/pdf" })], types: ["Files"] },
+		});
+		await act(async () => {
+			textarea.dispatchEvent(drop);
+		});
+		await flush();
+		expect(drop.defaultPrevented).toBe(true);
+		expect(values).toEqual([]);
+		expect(uploads).toBe(0);
+	});
+
 	it("leaves a text paste alone", async () => {
 		let uploads = 0;
 		apiClient.uploadAsset = async () => {
