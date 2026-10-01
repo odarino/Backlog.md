@@ -20,6 +20,11 @@ describe("imageMarkdown", () => {
 	it("strips characters that would break the alt text", () => {
 		expect(imageMarkdown("a]b[c\\d.png", "/x.png")).toBe("![abcd](/x.png)");
 	});
+
+	it("strips newlines and carriage returns from the alt text", () => {
+		expect(imageMarkdown("my\nshot.png", "/x.png")).toBe("![myshot](/x.png)");
+		expect(imageMarkdown("my\rshot.png", "/x.png")).toBe("![myshot](/x.png)");
+	});
 });
 
 describe("insertAtSelection", () => {
@@ -40,6 +45,11 @@ describe("placeholders", () => {
 		const b = uploadPlaceholder("shot.png");
 		expect(a).not.toBe(b);
 		expect(a).toMatch(/^!\[Uploading shot\.png…\]\(uploading:[a-z0-9-]+\)$/);
+	});
+
+	it("strips newlines from placeholder names", () => {
+		const placeholder = uploadPlaceholder("my\nshot.png");
+		expect(placeholder).toMatch(/^!\[Uploading myshot\.png…\]\(uploading:[a-z0-9-]+\)$/);
 	});
 
 	it("replaces only the first occurrence and ignores missing text", () => {
@@ -75,5 +85,9 @@ describe("toast text", () => {
 
 	it("reads the file name from a public path", () => {
 		expect(fileNameFromPath("/assets/images/task-1/My%20Chart.svg")).toBe("My Chart.svg");
+	});
+
+	it("handles malformed URL escapes gracefully", () => {
+		expect(fileNameFromPath("/assets/images/x/100%.png")).toBe("100%.png");
 	});
 });

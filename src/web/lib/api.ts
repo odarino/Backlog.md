@@ -454,7 +454,7 @@ export class ApiClient {
 			body: file,
 		});
 		if (!response.ok) {
-			throw ApiError.fromResponse(response);
+			throw await toApiError(response, "Failed to upload image");
 		}
 		return (await response.json()) as SavedAsset;
 	}
