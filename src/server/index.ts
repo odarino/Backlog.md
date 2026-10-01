@@ -37,7 +37,7 @@ import type { BrowserLoadingState } from "../utils/browser-loading-state.ts";
 import { normalizeDueDate } from "../utils/due-date.ts";
 import { isAmbiguousIdError } from "../utils/entity-id.ts";
 import { resolveMilestoneInputForStorage } from "../utils/milestone-storage.ts";
-import { DRAFT_PREFIX, extractAnyPrefix, getTaskPrefixError } from "../utils/prefix-config.ts";
+import { getTaskPrefixError } from "../utils/prefix-config.ts";
 import { formatValidPriorityValues, resolvePriorityValue } from "../utils/priority-config.ts";
 import {
 	formatValidProjectValues,
@@ -46,7 +46,7 @@ import {
 	resolveProjectValues,
 } from "../utils/project-config.ts";
 import { formatValidStatuses, getCanonicalStatuses, getValidStatuses } from "../utils/status.ts";
-import { isValidTaskId } from "../utils/task-id.ts";
+import { isDraftId, isValidTaskId } from "../utils/task-id.ts";
 import { isAmbiguousTaskIdError, LOCAL_TASK_LOOKUP_HINT } from "../utils/task-path.ts";
 import { getVersion } from "../utils/version.ts";
 import { checkRequest } from "./request-guard.ts";
@@ -55,14 +55,6 @@ import { checkRequest } from "./request-guard.ts";
 const PREFIX_PATTERN = /^[a-zA-Z]+-/i;
 const DEFAULT_PREFIX = "task-";
 const DOCUMENT_TYPES = new Set<Document["type"]>(DOCUMENT_TYPE_VALUES);
-
-/**
- * The task routes serve drafts too, so only an explicit DRAFT- id addresses a draft.
- * A prefix-less id such as "2" keeps naming a task, which is what the task store resolves it to.
- */
-function isDraftId(taskId: string): boolean {
-	return extractAnyPrefix(taskId) === DRAFT_PREFIX;
-}
 
 /**
  * Lookups stay local on every surface, but the CLI's hint ends by telling the reader to open
@@ -1141,9 +1133,9 @@ export class BacklogServer {
 				labels: payload.labels,
 				assignee: payload.assignee,
 				dependencies: payload.dependencies,
-				references: payload.references,
+				references: Array.isArray(payload.references) ? payload.references : undefined,
 				documentation: Array.isArray(payload.documentation) ? payload.documentation : undefined,
-				modifiedFiles: payload.modifiedFiles,
+				modifiedFiles: Array.isArray(payload.modifiedFiles) ? payload.modifiedFiles : undefined,
 				parentTaskId: payload.parentTaskId,
 				implementationPlan: payload.implementationPlan,
 				implementationNotes: payload.implementationNotes,
