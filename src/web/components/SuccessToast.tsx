@@ -4,11 +4,16 @@ interface SuccessToastProps {
 	message: string;
 	onDismiss: () => void;
 	icon?: React.ReactNode;
+	tone?: "success" | "error";
 }
 
-export function SuccessToast({ message, onDismiss, icon }: SuccessToastProps) {
+export function SuccessToast({ message, onDismiss, icon, tone = "success" }: SuccessToastProps) {
+	const colors =
+		tone === "error"
+			? "bg-red-600 dark:bg-red-700 border-red-500 dark:border-red-600"
+			: "bg-green-500 dark:bg-green-600 border-green-400 dark:border-green-500";
 	return (
-		<div className="fixed top-4 right-4 bg-green-500 dark:bg-green-600 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 animate-slide-in-right z-50 border border-green-400 dark:border-green-500 transition-colors duration-200">
+		<div role={tone === "error" ? "alert" : "status"} className={`fixed top-4 right-4 ${colors} text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 animate-slide-in-right z-50 border transition-colors duration-200`}>
 			{icon || <div className="w-2 h-2 bg-white rounded-circle" />}
 			<span className="font-medium">{message}</span>
 				<button

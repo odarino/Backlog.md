@@ -5,7 +5,7 @@ import { type TaskDetail, taskDependencyGraph, taskReadiness } from "../../core/
 import Modal from "./Modal";
 import { apiClient, NetworkError, readDemotionFailureCause, readMovedFailureState } from "../lib/api";
 import { useTheme } from "../contexts/ThemeContext";
-import MDEditor from "@uiw/react-md-editor";
+import TaskMarkdownEditor from "./TaskMarkdownEditor";
 import AcceptanceCriteriaEditor from "./AcceptanceCriteriaEditor";
 import MermaidMarkdown from './MermaidMarkdown';
 import ImageZoomScope from './ImageZoomScope';
@@ -1296,12 +1296,12 @@ export const TaskDetailsModal: React.FC<Props> = ({
               )
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-md">
-                <MDEditor
+                <TaskMarkdownEditor
                   value={description}
-                  onChange={(val) => setDescription(val || "")}
-                  preview="edit"
+                  onChange={setDescription}
+                  taskId={task?.id}
                   height={320}
-                  data-color-mode={theme}
+                  colorMode={theme}
                 />
               </div>
             )}
@@ -1617,12 +1617,12 @@ export const TaskDetailsModal: React.FC<Props> = ({
               )
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-md">
-                <MDEditor
+                <TaskMarkdownEditor
                   value={plan}
-                  onChange={(val) => setPlan(val || "")}
-                  preview="edit"
+                  onChange={setPlan}
+                  taskId={task?.id}
                   height={280}
-                  data-color-mode={theme}
+                  colorMode={theme}
                 />
               </div>
             )}
@@ -1641,12 +1641,12 @@ export const TaskDetailsModal: React.FC<Props> = ({
               )
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-md">
-                <MDEditor
+                <TaskMarkdownEditor
                   value={notes}
-                  onChange={(val) => setNotes(val || "")}
-                  preview="edit"
+                  onChange={setNotes}
+                  taskId={task?.id}
                   height={280}
-                  data-color-mode={theme}
+                  colorMode={theme}
                 />
               </div>
             )}
@@ -1715,15 +1715,13 @@ export const TaskDetailsModal: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-md">
-                  <MDEditor
+                  <TaskMarkdownEditor
                     value={finalSummary}
-                    onChange={(val) => setFinalSummary(val || "")}
-                    preview="edit"
+                    onChange={setFinalSummary}
+                    taskId={task?.id}
                     height={220}
-                    data-color-mode={theme}
-                    textareaProps={{
-                      placeholder: "PR-style summary of what was implemented (write when task is complete)",
-                    }}
+                    colorMode={theme}
+                    placeholder="PR-style summary of what was implemented (write when task is complete)"
                   />
                 </div>
               )}
