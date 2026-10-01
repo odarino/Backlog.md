@@ -1,7 +1,13 @@
 import { DEFAULT_STATUSES } from "../../constants/index.ts";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isLocalEditableTask, type AcceptanceCriterion, type Milestone, type Task, type TaskComment } from "../../types";
-import type { TaskCreateInput } from "../../types";
+import {
+  isLocalEditableTask,
+  type AcceptanceCriterion,
+  type Milestone,
+  type Task,
+  type TaskComment,
+  type TaskCreateInput,
+} from "../../types";
 import { type TaskDetail, taskDependencyGraph, taskReadiness } from "../../core/task-detail";
 import Modal from "./Modal";
 import { apiClient, NetworkError, readDemotionFailureCause, readMovedFailureState } from "../lib/api";
@@ -146,6 +152,7 @@ const buildTaskDetailsFormState = ({
 });
 
 // Lets the create form start from the same shape an existing task gives it.
+// `documentation` and `parentTaskId` are not form fields; they reach the payload directly from the prefill.
 const prefillToTask = (prefill: TaskCreateInput): Task => ({
   id: "",
   title: prefill.title,
