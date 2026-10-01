@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Core } from "../core/backlog.ts";
+import { withWorkflowLock } from "../core/workflow.ts";
 import { BacklogServer } from "../server/index.ts";
 import { createUniqueTestDir, retry, safeCleanup, withTimeout } from "./test-utils.ts";
 
@@ -21,6 +22,7 @@ const putConfig = async (patch: Record<string, unknown>) => {
 		body: JSON.stringify({ ...current, ...patch }),
 	});
 };
+const getConfig = async () => (await (await request("/api/config")).json()) as Record<string, unknown>;
 const getStatuses = async () => (await (await request("/api/statuses")).json()) as string[];
 
 beforeEach(async () => {
@@ -84,12 +86,45 @@ describe("status rename", () => {
 		expect(task.status).toBe("Doing");
 	});
 
-	it("rejects bad requests", async () => {
+	it("rejects bad requests and leaves the config unchanged", async () => {
+		const before = await getConfig();
 		expect((await post("/api/statuses/rename", { from: "Nope", to: "X" })).status).toBe(404);
 		expect((await post("/api/statuses/rename", { from: "In Progress", to: "done" })).status).toBe(409);
 		expect((await post("/api/statuses/rename", { from: "In Progress" })).status).toBe(400);
 		expect((await post("/api/statuses/rename", { from: "In Progress", to: 'a"b' })).status).toBe(400);
-		expect(await getStatuses()).toEqual(["To Do", "In Progress", "Done"]);
+		expect(await getConfig()).toEqual(before);
+	});
+
+	it("rejects bad JSON, non-string fields, and array bodies", async () => {
+		const before = await getConfig();
+		const raw = (body: string) =>
+			request("/api/statuses/rename", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+		expect((await raw("{nope")).status).toBe(400);
+		expect((await raw("[]")).status).toBe(400);
+		expect((await post("/api/statuses/rename", { from: 1, to: "X" })).status).toBe(400);
+		expect((await post("/api/statuses/rename", { from: "In Progress", to: ["X"] })).status).toBe(400);
+		expect(await getConfig()).toEqual(before);
+	});
+
+	it("moves colors and the default status to the new name", async () => {
+		expect((await putConfig({ statusColors: { "In Progress": "#112233" }, defaultStatus: "In Progress" })).status).toBe(
+			200,
+		);
+		expect((await post("/api/statuses/rename", { from: "In Progress", to: "Doing" })).status).toBe(200);
+		const config = await getConfig();
+		expect(config.statusColors).toEqual({ Doing: "#112233" });
+		expect(config.defaultStatus).toBe("Doing");
+	});
+
+	it("refuses a foreign origin", async () => {
+		const before = await getConfig();
+		const response = await request("/api/statuses/rename", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+			body: JSON.stringify({ from: "In Progress", to: "Doing" }),
+		});
+		expect(response.status).toBe(403);
+		expect(await getConfig()).toEqual(before);
 	});
 });
 
@@ -105,9 +140,10 @@ describe("status remove", () => {
 	});
 
 	it("needs moveTo while tasks use the status", async () => {
+		const before = await getConfig();
 		expect((await post("/api/statuses/remove", { status: "To Do" })).status).toBe(400);
 		expect((await post("/api/statuses/remove", {})).status).toBe(400);
-		expect(await getStatuses()).toEqual(["To Do", "In Progress", "Done"]);
+		expect(await getConfig()).toEqual(before);
 	});
 });
 
@@ -119,21 +155,26 @@ describe("PUT /api/config status rules", () => {
 	});
 
 	it("rejects a dropped or respelled status", async () => {
+		const before = await getConfig();
 		const dropped = await putConfig({ statuses: ["To Do", "Done"] });
 		expect(dropped.status).toBe(409);
 		expect(((await dropped.json()) as { error: string }).error).toBe(
 			"Use rename or remove to change existing statuses",
 		);
 		expect((await putConfig({ statuses: ["To Do", "In progress", "Done"] })).status).toBe(409);
-		expect(await getStatuses()).toEqual(["To Do", "In Progress", "Done"]);
+		expect(await getConfig()).toEqual(before);
 	});
 
 	it("rejects invalid lists", async () => {
+		const before = await getConfig();
 		expect((await putConfig({ statuses: ["To Do", "In Progress", "Done", "done"] })).status).toBe(400);
+		expect(await getConfig()).toEqual(before);
 	});
 
 	it("rejects a default status outside the list", async () => {
+		const before = await getConfig();
 		expect((await putConfig({ defaultStatus: "Nope" })).status).toBe(400);
+		expect(await getConfig()).toEqual(before);
 		expect((await putConfig({ defaultStatus: "To Do" })).status).toBe(200);
 	});
 
@@ -142,7 +183,77 @@ describe("PUT /api/config status rules", () => {
 		expect(response.status).toBe(200);
 		const config = (await (await request("/api/config")).json()) as { statusColors?: Record<string, string> };
 		expect(config.statusColors).toEqual({ "To Do": "#aabbcc" });
+		const before = await getConfig();
 		expect((await putConfig({ statusColors: { Nope: "#000000" } })).status).toBe(400);
+		expect(await getConfig()).toEqual(before);
+	});
+
+	it("rejects malformed or duplicate status colors", async () => {
+		const before = await getConfig();
+		for (const statusColors of [null, [], "red"]) {
+			const response = await putConfig({ statusColors });
+			expect(response.status).toBe(400);
+			expect(((await response.json()) as { error: string }).error).toBe("statusColors must be an object");
+		}
+		const dup = await putConfig({ statusColors: { "to do": "#111111", "To Do": "#222222" } });
+		expect(dup.status).toBe(400);
+		expect(((await dup.json()) as { error: string }).error).toBe("Duplicate color for To Do");
+		expect(await getConfig()).toEqual(before);
+	});
+
+	it("keeps stored colors and default status when the body omits them", async () => {
+		expect((await putConfig({ statusColors: { Done: "#00ff00" }, defaultStatus: "To Do" })).status).toBe(200);
+		const { statusColors: _c, defaultStatus: _d, ...rest } = await getConfig();
+		const response = await request("/api/config", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...rest, projectName: "Again" }),
+		});
+		expect(response.status).toBe(200);
+		const config = await getConfig();
+		expect(config.statusColors).toEqual({ Done: "#00ff00" });
+		expect(config.defaultStatus).toBe("To Do");
+	});
+
+	it("waits for the workflow lock and rechecks the config it finds", async () => {
+		const oldList = ["To Do", "In Progress", "Done"];
+		let release = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const holder = withWorkflowLock(async () => {
+			await gate;
+			// A change from another Core instance, as another process would make it.
+			const other = new Core(testDir);
+			const config = await other.filesystem.loadConfig();
+			if (!config) throw new Error("Missing config");
+			await other.filesystem.saveConfig({ ...config, statuses: ["To Do", "Doing", "Done"] });
+		});
+		let settled = false;
+		const pending = putConfig({ statuses: oldList }).then((response) => {
+			settled = true;
+			return response;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		expect(settled).toBe(false);
+		release();
+		await holder;
+		expect((await pending).status).toBe(409);
+		expect(await getStatuses()).toEqual(["To Do", "Doing", "Done"]);
+	});
+
+	it("stays consistent when a rename and a stale PUT overlap", async () => {
+		const [renamed, put] = await Promise.all([
+			post("/api/statuses/rename", { from: "In Progress", to: "Doing" }),
+			putConfig({ statuses: ["To Do", "In Progress", "Done", "New"] }),
+		]);
+		expect(renamed.status).toBe(200);
+		expect([200, 409]).toContain(put.status);
+		const statuses = await getStatuses();
+		for (const id of ids) {
+			const task = (await (await request(`/api/tasks/${id}`)).json()) as { status: string };
+			expect(statuses).toContain(task.status);
+		}
 	});
 
 	it("still saves a body without statuses", async () => {
@@ -158,6 +269,24 @@ describe("PUT /api/config status rules", () => {
 });
 
 describe("workflow broadcasts", () => {
+	it("publishes nothing after a failed rename", async () => {
+		const messages: string[] = [];
+		socket = new WebSocket(`ws://127.0.0.1:${serverPort}`);
+		await withTimeout(
+			new Promise<void>((resolve, reject) => {
+				if (!socket) return reject(new Error("WebSocket was not created"));
+				socket.onopen = () => resolve();
+				socket.onerror = () => reject(new Error("WebSocket failed to open"));
+			}),
+			"workflow test WebSocket",
+			2000,
+		);
+		socket.onmessage = (event) => messages.push(String(event.data));
+		expect((await post("/api/statuses/rename", { from: "Nope", to: "X" })).status).toBe(404);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		expect(messages.filter((m) => m === "tasks-updated" || m === "config-updated")).toEqual([]);
+	});
+
 	it("publishes tasks and config updates after a rename", async () => {
 		const messages: string[] = [];
 		socket = new WebSocket(`ws://127.0.0.1:${serverPort}`);

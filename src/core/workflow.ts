@@ -60,6 +60,7 @@ export function validateStatusColors(
 	for (const [name, color] of Object.entries(colors ?? {})) {
 		const status = findStatus(statuses, name);
 		if (!status) throw new WorkflowError(`Unknown status in colors: ${name}`, 400);
+		if (status in result) throw new WorkflowError(`Duplicate color for ${status}`, 400);
 		if (typeof color !== "string" || !COLOR_PATTERN.test(color)) {
 			throw new WorkflowError(`Invalid color for ${status}: ${color}`, 400);
 		}
@@ -84,7 +85,7 @@ export async function renameStatus(
 	to: string,
 	autoCommit?: boolean,
 ): Promise<WorkflowResult> {
-	return await serialized(async () => {
+	return await withWorkflowLock(async () => {
 		const { config } = await loadWorkflow(core);
 		const source = findStatus(config.statuses, from);
 		if (!source) throw new WorkflowError(`Unknown status: ${from}`, 404);
@@ -125,7 +126,7 @@ export async function removeStatus(
 	moveTo: string | undefined,
 	autoCommit?: boolean,
 ): Promise<WorkflowResult> {
-	return await serialized(async () => {
+	return await withWorkflowLock(async () => {
 		const { config } = await loadWorkflow(core);
 		const removed = findStatus(config.statuses, status);
 		if (!removed) throw new WorkflowError(`Unknown status: ${status}`, 404);
@@ -182,7 +183,7 @@ interface RewrittenTask extends FolderTask {
 let workflowQueue: Promise<unknown> = Promise.resolve();
 
 /** Run status changes in this process one at a time, so each one starts from the config the last one saved. */
-function serialized<T>(operation: () => Promise<T>): Promise<T> {
+export function withWorkflowLock<T>(operation: () => Promise<T>): Promise<T> {
 	const run = workflowQueue.then(operation);
 	workflowQueue = run.catch(() => undefined);
 	return run;
