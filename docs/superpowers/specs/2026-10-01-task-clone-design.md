@@ -25,7 +25,7 @@ Copy an existing task into a new task: from the web UI (pre-filled create form),
 | References, documentation, modified files | Copied |
 | Acceptance criteria | Copied text, all unchecked |
 | Definition of Done | Copied text, all unchecked, and no extra project defaults (`definitionOfDoneAdd` = the source texts, `disableDefinitionOfDoneDefaults: true`) |
-| Implementation notes, final summary, comments | Not copied |
+| Due date, implementation notes, final summary, comments | Not copied |
 | ID, created date, updated date, ordinal | New (assigned by the normal create path) |
 
 ## Architecture

@@ -35,7 +35,7 @@ export function registerTaskTools(server: McpServer, config: BacklogConfig): voi
 		{
 			name: "task_clone",
 			description:
-				"Copy a task into a new task: copies the content, labels, links and checklists (unchecked); resets status, notes, summary and comments",
+				"Copy a task into a new task: copies the content, labels, links and checklists (unchecked); resets the status (drafts stay drafts), due date, notes, summary, and comments",
 			inputSchema: taskCloneSchema,
 			annotations: { title: "Clone Task", destructiveHint: false },
 		},
