@@ -107,9 +107,10 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 	};
 
 	const handleDrop = (event: DragEvent<HTMLTextAreaElement>) => {
+		// A file drop that is not prevented makes the browser open the file and lose the edits.
+		if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
 		const files = imageFilesFrom(event.dataTransfer?.files);
 		if (files.length === 0) return;
-		event.preventDefault();
 		startUploads(
 			files.map((file) => ({ file, uploadName: file.name, label: file.name })),
 			event.currentTarget,
