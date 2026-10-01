@@ -81,6 +81,7 @@ import {
 	validateDependencies,
 } from "../utils/task-builders.ts";
 import { buildTaskCloneInput } from "../utils/task-clone.ts";
+import { isDraftId } from "../utils/task-id.ts";
 import { withoutVacatedTaskLinks } from "../utils/task-links.ts";
 import {
 	AmbiguousTaskIdError,
@@ -1757,8 +1758,13 @@ export class Core {
 	}
 
 	async cloneTask(taskId: string, options: { title?: string } = {}): Promise<{ task: Task; filePath?: string }> {
-		const source = (await this.fs.loadDraft(taskId)) ?? (await this.getTask(taskId));
+		// Same lookup as `task view`: a bare id names a task, only an explicit DRAFT- id names a draft.
+		const source = isDraftId(taskId) ? await this.fs.loadDraft(taskId) : await this.getTask(taskId);
 		if (!source) throw new Error(`Task not found: ${taskId}`);
+		if (!isLocalEditableTask(source) || source.branch) {
+			const where = source.branch ? `branch ${source.branch}` : "another branch";
+			throw new Error(`Cannot clone ${source.id}: it exists only on ${where}. Check out that branch first.`);
+		}
 		return await this.createTaskFromInput(buildTaskCloneInput(source, options));
 	}
 
