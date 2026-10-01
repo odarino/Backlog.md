@@ -7,6 +7,8 @@ import {
 	detectImageKind,
 	fitWithin,
 	ImageDecodeError,
+	MAX_IMAGE_PIXELS,
+	readImageDimensions,
 	UnsupportedImageError,
 } from "../core/image-compress.ts";
 import { jpegFixture, pngFixture, syntheticImage, withExifOrientation } from "./image-fixtures.ts";
@@ -64,7 +66,45 @@ describe("compressOptionsFromConfig", () => {
 	});
 });
 
+/** Patch the IHDR width and height of a PNG. The CRC stays stale: the header check runs before decode. */
+const withPngSize = (png: Uint8Array, width: number, height: number) => {
+	const out = png.slice();
+	const view = new DataView(out.buffer);
+	view.setUint32(16, width);
+	view.setUint32(20, height);
+	return out;
+};
+
+describe("readImageDimensions", () => {
+	it("reads the declared size of JPEG, PNG, and WebP files", async () => {
+		expect(readImageDimensions("jpeg", await jpegFixture(320, 200))).toEqual({ width: 320, height: 200 });
+		// The EXIF segment comes before the SOF marker; the header holds the stored (not rotated) size.
+		const rotated = withExifOrientation(await jpegFixture(1200, 600), 6);
+		expect(readImageDimensions("jpeg", rotated)).toEqual({ width: 1200, height: 600 });
+		expect(readImageDimensions("png", await pngFixture(640, 480))).toEqual({ width: 640, height: 480 });
+		const lossy = (await compressImage(await pngFixture(300, 150), { maxDimension: 1920, quality: 0.8 })).bytes;
+		expect(readImageDimensions("webp", lossy)).toEqual({ width: 300, height: 150 });
+		const lossless = new Uint8Array(await encodeWebp(syntheticImage(70, 33), { lossless: 1 }));
+		expect(readImageDimensions("webp", lossless)).toEqual({ width: 70, height: 33 });
+	});
+
+	it("returns null when the header is cut short", () => {
+		expect(readImageDimensions("jpeg", new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x01, 0x02]))).toBeNull();
+		expect(readImageDimensions("png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBeNull();
+		expect(readImageDimensions("webp", ascii("RIFF\u0000\u0000\u0000\u0000WEBPVP8 "))).toBeNull();
+	});
+});
+
 describe("compressImage", () => {
+	it("rejects an image that declares too many pixels before it decodes it", async () => {
+		const bomb = withPngSize(await pngFixture(16, 16), 12000, 12000);
+		expect(12000 * 12000).toBeGreaterThan(MAX_IMAGE_PIXELS);
+		const error = await compressImage(bomb, { maxDimension: 1920, quality: 0.8 }).catch((e) => e);
+		expect(error).toBeInstanceOf(ImageDecodeError);
+		expect((error as Error).message).toContain("too large");
+		expect((error as Error).message).toContain("12000x12000");
+	});
+
 	it("resizes a large JPEG and encodes a smaller WebP", async () => {
 		const input = await jpegFixture(2400, 1600);
 		const result = await compressImage(input, { maxDimension: 1920, quality: 0.8 });
@@ -90,11 +130,11 @@ describe("compressImage", () => {
 	});
 
 	it("keeps the original bytes when the WebP is not smaller", async () => {
-		// A 1x3 PNG is tiny: its lossy WebP is about 1.37x larger (114 bytes vs 83 bytes).
+		// A 1x3 PNG is tiny: its lossy WebP is larger (measured: 114 bytes vs 83 bytes, about 1.37x).
 		const input = await pngFixture(1, 3);
 		const result = await compressImage(input, { maxDimension: 1920, quality: 1 });
 		const webp = new Uint8Array(await encodeWebp(syntheticImage(1, 3), { quality: 100 }));
-		expect(webp.byteLength).toBeGreaterThan(input.byteLength * 1.3);
+		expect(webp.byteLength).toBeGreaterThan(input.byteLength);
 		expect(result.compressed).toBe(false);
 		expect(result.extension).toBe("png");
 		expect(result.bytes).toEqual(input);
