@@ -207,6 +207,16 @@ function parseStatusColors(content: string): Record<string, string> | undefined 
 	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
+/** Read one scalar config key as a YAML string; nothing when it is absent, unreadable, or not a string. */
+function parseConfigStringValue(content: string, key: string): string | undefined {
+	const block = extractConfigKeyYaml(content, key);
+	if (block === undefined) {
+		return undefined;
+	}
+	const parsed = readYamlKey(block, key);
+	return "value" in parsed && typeof parsed.value === "string" ? parsed.value : undefined;
+}
+
 /**
  * Parse one list-valued config key as YAML, so quoting, escapes, block sequences, and trailing
  * comments are handled by the parser instead of by hand. The key's own block is what gets parsed, so a
@@ -2120,6 +2130,7 @@ ${description || `Milestone: ${title}`}`,
 		config.projects = parseListValue("projects");
 		config.defaultAssignee = parseListValue("default_assignee");
 		config.statusColors = parseStatusColors(content);
+		const defaultStatus = parseConfigStringValue(content, "default_status");
 		const lines = content.split("\n");
 
 		for (const line of lines) {
@@ -2140,7 +2151,7 @@ ${description || `Milestone: ${title}`}`,
 					config.defaultReporter = value.replace(/['"]/g, "");
 					break;
 				case "default_status":
-					config.defaultStatus = value.replace(/['"]/g, "");
+					config.defaultStatus = defaultStatus ?? value.replace(/^['"]|['"]$/g, "");
 					break;
 				case "definition_of_done":
 					if (parsedDefinitionOfDone !== undefined) {
