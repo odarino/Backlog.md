@@ -234,10 +234,14 @@ describe("PUT /api/config status rules", () => {
 			settled = true;
 			return response;
 		});
-		await new Promise((resolve) => setTimeout(resolve, 150));
-		expect(settled).toBe(false);
-		release();
-		await holder;
+		try {
+			await new Promise((resolve) => setTimeout(resolve, 150));
+			expect(settled).toBe(false);
+		} finally {
+			// Always free the shared workflow queue, even when an assertion fails.
+			release();
+			await withTimeout(holder, "workflow lock holder", 2000);
+		}
 		expect((await pending).status).toBe(409);
 		expect(await getStatuses()).toEqual(["To Do", "Doing", "Done"]);
 	});
