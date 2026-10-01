@@ -40,6 +40,28 @@ describe("MCP task_clone", () => {
 		expect(text).toContain("Task TASK-2 - Copy of Source");
 	});
 
+	it("resolves a bare ID to the task even when a draft shares the number", async () => {
+		await mcpServer.testInterface.callTool({
+			params: { name: "task_create", arguments: { title: "Drafty", status: "Draft" } },
+		});
+		const result = await mcpServer.testInterface.callTool({
+			params: { name: "task_clone", arguments: { id: "1" } },
+		});
+		expect(result.isError).not.toBe(true);
+		expect(getText(result.content)).toContain("Cloned 1 to TASK-2.");
+	});
+
+	it("refuses a task that exists only on another branch", async () => {
+		const real = await mcpServer.getTask("TASK-1");
+		if (!real) throw new Error("missing source");
+		mcpServer.getTask = async () => ({ ...real, source: "local-branch", branch: "feature/x" });
+		const result = await mcpServer.testInterface.callTool({
+			params: { name: "task_clone", arguments: { id: "TASK-1" } },
+		});
+		expect(result.isError).toBe(true);
+		expect(getText(result.content)).toContain("it exists only on branch feature/x. Check out that branch first.");
+	});
+
 	it("applies a title override", async () => {
 		const result = await mcpServer.testInterface.callTool({
 			params: { name: "task_clone", arguments: { id: "TASK-1", title: "Custom" } },

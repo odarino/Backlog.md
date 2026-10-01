@@ -57,6 +57,13 @@ describe("CLI task clone", () => {
 		expect(result.stderr.toString()).toContain("error: missing required argument 'title'");
 	});
 
+	it("resolves a bare ID to the task even when a draft shares the number", async () => {
+		await $`bun ${cliPath} task create "Drafty" --draft`.cwd(TEST_DIR).quiet();
+		const result = await $`bun ${cliPath} task clone 1`.cwd(TEST_DIR).quiet();
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout.toString()).toContain("Created task TASK-2");
+	});
+
 	it("clones a draft as a draft", async () => {
 		await $`bun ${cliPath} task create "Drafty" --draft`.cwd(TEST_DIR).quiet();
 		const result = await $`bun ${cliPath} task clone DRAFT-1`.cwd(TEST_DIR).quiet();

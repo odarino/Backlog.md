@@ -1,5 +1,5 @@
 import type { Task } from "../types/index.ts";
-import { escapeRegex, extractAnyPrefix, normalizeId } from "./prefix-config.ts";
+import { DRAFT_PREFIX, escapeRegex, extractAnyPrefix, normalizeId } from "./prefix-config.ts";
 
 const DEFAULT_TASK_PREFIX = "task";
 const NUMERIC_TASK_ID_PATTERN = /^(?:[a-zA-Z]+-)?[0-9]+(?:\.[0-9]+)*$/;
@@ -19,6 +19,13 @@ export function normalizeTaskId(taskId: string, prefix: string = DEFAULT_TASK_PR
 	const inferredPrefix = extractAnyPrefix(taskId);
 	const effectivePrefix = inferredPrefix && prefix === DEFAULT_TASK_PREFIX ? inferredPrefix : prefix;
 	return normalizeId(taskId, effectivePrefix);
+}
+
+/**
+ * Only an explicit DRAFT- id addresses a draft. A prefix-less id such as "2" keeps naming a task.
+ */
+export function isDraftId(taskId: string): boolean {
+	return extractAnyPrefix(taskId) === DRAFT_PREFIX;
 }
 
 function extractTaskBody(value: string, prefix: string = DEFAULT_TASK_PREFIX): string | null {

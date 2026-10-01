@@ -210,6 +210,64 @@ describe("Core.cloneTask", () => {
 		expect(task.title).toBe("Other");
 	});
 
+	it("resolves a bare or TASK- id to the task even when a draft shares the number", async () => {
+		const { task: source } = await core.createTaskFromInput({ title: "Real" }, false);
+		const { task: draft } = await core.createTaskFromInput({ title: "Idea", status: "Draft" }, false);
+		expect(source.id).toBe("TASK-1");
+		expect(draft.id).toBe("DRAFT-1");
+		const bare = await core.cloneTask("1");
+		expect(bare.task.id.startsWith("TASK-")).toBe(true);
+		expect(bare.task.title).toBe("Copy of Real");
+		const prefixed = await core.cloneTask("TASK-1");
+		expect(prefixed.task.title).toBe("Copy of Real");
+	});
+
+	it("clones the draft only for an explicit DRAFT- id", async () => {
+		await core.createTaskFromInput({ title: "Real" }, false);
+		await core.createTaskFromInput({ title: "Idea", status: "Draft" }, false);
+		const { task } = await core.cloneTask("DRAFT-1");
+		expect(task.id.startsWith("DRAFT-")).toBe(true);
+		expect(task.title).toBe("Copy of Idea");
+	});
+
+	it("refuses a source that exists only on another branch", async () => {
+		const { task: source } = await core.createTaskFromInput({ title: "Elsewhere" }, false);
+		core.getTask = async () => ({ ...source, source: "local-branch", branch: "feature/x" });
+		await expect(core.cloneTask(source.id)).rejects.toThrow(
+			`Cannot clone ${source.id}: it exists only on branch feature/x. Check out that branch first.`,
+		);
+		core.getTask = async () => ({ ...source, source: "remote" });
+		await expect(core.cloneTask(source.id)).rejects.toThrow(
+			`Cannot clone ${source.id}: it exists only on another branch. Check out that branch first.`,
+		);
+	});
+
+	it("keeps an explicit empty assignee list despite a default assignee", async () => {
+		const config = await core.fs.loadConfig();
+		if (!config) throw new Error("missing config");
+		await core.fs.saveConfig({ ...config, defaultAssignee: ["@default"] });
+		const { task: source } = await core.createTaskFromInput({ title: "Nobody", assignee: [] }, false);
+		expect(source.assignee).toEqual([]);
+		const { task } = await core.cloneTask(source.id);
+		expect(task.assignee).toEqual([]);
+	});
+
+	it("keeps the parent of a subtask and allocates a sibling id", async () => {
+		const { task: parent } = await core.createTaskFromInput({ title: "Parent" }, false);
+		const { task: child } = await core.createTaskFromInput({ title: "Child", parentTaskId: parent.id }, false);
+		expect(child.id).toBe("TASK-1.1");
+		const { task } = await core.cloneTask(child.id);
+		expect(task.parentTaskId).toBe(parent.id);
+		expect(task.id).toBe("TASK-1.2");
+	});
+
+	it("resets a completed source to the default status", async () => {
+		const { task: source } = await core.createTaskFromInput({ title: "Finished", status: "Done" }, false);
+		await core.completeTask(source.id, false);
+		const { task } = await core.cloneTask(source.id);
+		expect(task.status).toBe("To Do");
+	});
+
 	it("rejects an unknown id", async () => {
 		await expect(core.cloneTask("TASK-999")).rejects.toThrow("Task not found: TASK-999");
 	});
