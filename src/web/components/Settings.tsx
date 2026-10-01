@@ -404,6 +404,38 @@ const Settings: React.FC = () => {
 							</div>
 
 							<div>
+								<label htmlFor="imageMaxDimension" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+									Image Max Dimension
+								</label>
+								<input
+									id="imageMaxDimension"
+									type="number"
+									min="256"
+									max="8192"
+									step="1"
+									value={config.imageMaxDimension ?? 1920}
+									onChange={(e) => handleInputChange('imageMaxDimension', parseInt(e.target.value) || 1920)}
+									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-stone-500 dark:focus:ring-stone-400 transition-colors duration-200"
+								/>
+							</div>
+
+							<div>
+								<label htmlFor="imageQuality" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+									Image Quality
+								</label>
+								<input
+									id="imageQuality"
+									type="number"
+									min="0.1"
+									max="1"
+									step="0.05"
+									value={config.imageQuality ?? 0.8}
+									onChange={(e) => handleInputChange('imageQuality', parseFloat(e.target.value) || 0.8)}
+									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-stone-500 dark:focus:ring-stone-400 transition-colors duration-200"
+								/>
+							</div>
+
+							<div>
 								<label htmlFor="taskResolutionStrategy" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
 									Task Resolution Strategy
 								</label>
