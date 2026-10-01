@@ -153,6 +153,8 @@ describe("Settings workflow editor", () => {
 		expect(nameInputs().map((input) => input.value)).toEqual(["To Do", "In Progress", "Review", "Blocked", "Done"]);
 		// The editor compares against the saved config, so nothing is left to save.
 		expect(buttonByText("Save workflow").disabled).toBe(true);
+		const defaultOptions = Array.from(document.querySelectorAll<HTMLOptionElement>("#defaultStatus option"));
+		expect(defaultOptions.map((option) => option.value)).toContain("Blocked");
 		expect(document.body.textContent).toContain("Workflow saved");
 	});
 
