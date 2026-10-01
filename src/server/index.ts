@@ -2,8 +2,10 @@ import net from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { DEFAULT_STATUSES } from "../constants/index.ts";
+import { AssetError, listAssets, MAX_ASSET_BYTES, saveAsset } from "../core/assets.ts";
 import { Core, TaskArchiveStatusError } from "../core/backlog.ts";
 import type { ContentStore } from "../core/content-store.ts";
+import { compressOptionsFromConfig } from "../core/image-compress.ts";
 import { initializeProject } from "../core/init.ts";
 import type { SearchService } from "../core/search-service.ts";
 import { getTaskStatistics } from "../core/statistics.ts";
@@ -445,6 +447,10 @@ export class BacklogServer {
 						GET: async () => await this.handleGetConfig(),
 						PUT: async (req: Request) => await this.handleUpdateConfig(req),
 					},
+					"/api/assets": {
+						GET: async (req: Request) => await this.handleListAssets(req),
+						POST: async (req: Request) => await this.handleUploadAsset(req),
+					},
 					"/api/docs": {
 						GET: async () => await this.handleListDocs(),
 						POST: async (req: Request) => await this.handleCreateDoc(req),
@@ -657,6 +663,48 @@ export class BacklogServer {
 		}
 	}
 
+	private assetsRoot(): string {
+		return join(dirname(this.core.filesystem.docsDir), "assets");
+	}
+
+	private assetErrorResponse(error: unknown, fallback: string): Response {
+		if (error instanceof AssetError) {
+			return Response.json({ error: error.message }, { status: error.status });
+		}
+		console.error(fallback, error);
+		return Response.json({ error: fallback }, { status: 500 });
+	}
+
+	private async handleListAssets(req: Request): Promise<Response> {
+		try {
+			const taskId = new URL(req.url).searchParams.get("taskId");
+			return Response.json(await listAssets(this.assetsRoot(), taskId));
+		} catch (error) {
+			return this.assetErrorResponse(error, "Failed to list assets");
+		}
+	}
+
+	private async handleUploadAsset(req: Request): Promise<Response> {
+		const declaredLength = Number(req.headers.get("content-length") ?? "0");
+		if (declaredLength > MAX_ASSET_BYTES) {
+			return Response.json({ error: "Image is larger than 25 MB" }, { status: 413 });
+		}
+		try {
+			const url = new URL(req.url);
+			const bytes = new Uint8Array(await req.arrayBuffer());
+			const config = await this.core.filesystem.loadConfig();
+			const saved = await saveAsset(this.assetsRoot(), {
+				bytes,
+				name: url.searchParams.get("name") ?? undefined,
+				taskId: url.searchParams.get("taskId"),
+				options: compressOptionsFromConfig(config),
+			});
+			return Response.json(saved);
+		} catch (error) {
+			return this.assetErrorResponse(error, "Failed to save image");
+		}
+	}
+
 	private async handleAssetRequest(req: Request): Promise<Response> {
 		try {
 			const url = new URL(req.url);
@@ -670,10 +718,7 @@ export class BacklogServer {
 			// disallow traversal
 			if (relPath.includes("..")) return new Response("Not Found", { status: 404 });
 
-			// derive backlog root from docsDir (parent of backlog/docs)
-			const docsDir = this.core.filesystem.docsDir;
-			const backlogRoot = dirname(docsDir);
-			const assetsRoot = join(backlogRoot, "assets");
+			const assetsRoot = this.assetsRoot();
 			const filePath = join(assetsRoot, relPath);
 
 			if (!filePath.startsWith(assetsRoot)) return new Response("Not Found", { status: 404 });
@@ -697,7 +742,13 @@ export class BacklogServer {
 			};
 
 			const mime = mimeMap[ext] ?? "application/octet-stream";
-			return new Response(file, { headers: { "Content-Type": mime } });
+			const headers: Record<string, string> = { "Content-Type": mime };
+			if (ext === "svg") {
+				// An uploaded SVG opened directly must not run scripts in the app origin.
+				headers["Content-Security-Policy"] = "sandbox";
+				headers["X-Content-Type-Options"] = "nosniff";
+			}
+			return new Response(file, { headers });
 		} catch (error) {
 			console.error("Error serving asset:", error);
 			return new Response("Internal Server Error", { status: 500 });
@@ -1516,6 +1567,27 @@ export class BacklogServer {
 
 			if (updatedConfig.defaultPort && (updatedConfig.defaultPort < 1 || updatedConfig.defaultPort > 65535)) {
 				return Response.json({ error: "Port must be between 1 and 65535" }, { status: 400 });
+			}
+
+			if (
+				updatedConfig.imageMaxDimension !== undefined &&
+				!(
+					Number.isInteger(updatedConfig.imageMaxDimension) &&
+					updatedConfig.imageMaxDimension >= 256 &&
+					updatedConfig.imageMaxDimension <= 8192
+				)
+			) {
+				return Response.json({ error: "Image max dimension must be between 256 and 8192" }, { status: 400 });
+			}
+			if (
+				updatedConfig.imageQuality !== undefined &&
+				!(
+					typeof updatedConfig.imageQuality === "number" &&
+					updatedConfig.imageQuality >= 0.1 &&
+					updatedConfig.imageQuality <= 1
+				)
+			) {
+				return Response.json({ error: "Image quality must be between 0.1 and 1" }, { status: 400 });
 			}
 
 			// Save configuration

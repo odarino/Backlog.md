@@ -337,6 +337,8 @@ export interface BacklogConfig {
 	defaultStatus?: string;
 	dateFormat: string;
 	maxColumnWidth?: number;
+	imageMaxDimension?: number;
+	imageQuality?: number;
 	taskResolutionStrategy?: "most_recent" | "most_progressed";
 	defaultEditor?: string;
 	autoOpenBrowser?: boolean;

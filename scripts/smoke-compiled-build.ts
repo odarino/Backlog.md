@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { jpegFixture } from "../src/test/image-fixtures.ts";
 
 const executablePath = process.argv[2];
 const expectedVersion = process.argv[3];
@@ -278,6 +279,21 @@ try {
 			faviconResponse.headers.get("content-type")?.includes("image/png"),
 			`Unexpected favicon content type: ${faviconResponse.headers.get("content-type")}`,
 		);
+
+		const uploadBytes = await jpegFixture(2400, 1600);
+		const uploadResponse = await fetchWithTimeout(`${baseUrl}/api/assets?taskId=TASK-1&name=smoke.jpg`, {
+			method: "POST",
+			headers: { "Content-Type": "image/jpeg" },
+			body: new Uint8Array(uploadBytes),
+		});
+		assert(uploadResponse.status === 200, `Asset upload returned ${uploadResponse.status}.`);
+		const uploaded = (await uploadResponse.json()) as { path: string; compressed: boolean; finalSize: number };
+		assert(
+			uploaded.compressed && uploaded.finalSize < uploadBytes.byteLength,
+			"Compiled binary did not compress the upload.",
+		);
+		const uploadedFile = await fetchWithTimeout(`${baseUrl}${uploaded.path}`);
+		assert(uploadedFile.headers.get("content-type") === "image/webp", "Uploaded asset is not served as WebP.");
 	} catch (error) {
 		browserFailure = { error };
 	}
