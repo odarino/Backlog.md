@@ -1,13 +1,14 @@
 import type { SavedAsset } from "../../types";
 
-const ALT_UNSAFE = /[[\]\\]/g;
+const ALT_UNSAFE = /[\]\\[]/g;
+
+function stripAlternativeChars(text: string): string {
+	return text.replace(ALT_UNSAFE, "").replace(/[\r\n]/g, "");
+}
 let placeholderCounter = 0;
 
 export function imageMarkdown(name: string, path: string): string {
-	const alt = name
-		.replace(/\.[^.]*$/, "")
-		.replace(ALT_UNSAFE, "")
-		.trim();
+	const alt = stripAlternativeChars(name.replace(/\.[^.]*$/, "")).trim();
 	return `![${alt}](${path})`;
 }
 
@@ -24,7 +25,7 @@ export function insertAtSelection(
 
 export function uploadPlaceholder(name: string): string {
 	placeholderCounter += 1;
-	return `![Uploading ${name.replace(ALT_UNSAFE, "")}…](uploading:${Date.now().toString(36)}-${placeholderCounter})`;
+	return `![Uploading ${stripAlternativeChars(name)}…](uploading:${Date.now().toString(36)}-${placeholderCounter})`;
 }
 
 export function replaceFirst(value: string, search: string, replacement: string): string {
@@ -49,5 +50,10 @@ export function uploadToastMessage(saved: SavedAsset): string {
 }
 
 export function fileNameFromPath(path: string): string {
-	return decodeURIComponent(path.split("/").pop() ?? path);
+	const segment = path.split("/").pop() ?? path;
+	try {
+		return decodeURIComponent(segment);
+	} catch {
+		return segment;
+	}
 }
