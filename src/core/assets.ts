@@ -1,3 +1,4 @@
+import type { Dirent, Stats } from "node:fs";
 import { link, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
 import type { AssetEntry, SavedAsset } from "../types/index.ts";
@@ -30,14 +31,17 @@ export function assetFolderForTask(taskId?: string | null): string {
 
 export function slugifyAssetName(name: string): string {
 	const base = basename(name.replaceAll("\\", "/")).replace(/\.[^.]*$/, "");
-	return base
+	const slug = base
 		.normalize("NFKD")
-		.replace(/[̀-ͯ]/g, "")
+		.replace(/[\u0300-\u036f]/g, "")
 		.replace(/đ/gi, "d")
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-+|-+$/g, "")
-		.slice(0, 80);
+		.slice(0, 80)
+		.replace(/^-+|-+$/g, "");
+	// Windows reserves these device names, with or without an extension.
+	return /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/.test(slug) ? `${slug}-image` : slug;
 }
 
 export function pasteAssetName(now: Date = new Date()): string {
@@ -47,7 +51,7 @@ export function pasteAssetName(now: Date = new Date()): string {
 	return `paste-${date}-${time}`;
 }
 
-export function toPublicPath(assetsRoot: string, filePath: string): string {
+function toPublicPath(assetsRoot: string, filePath: string): string {
 	return `/assets/${relative(assetsRoot, filePath).split(sep).map(encodeURIComponent).join("/")}`;
 }
 
@@ -59,7 +63,7 @@ function isExistsError(error: unknown): boolean {
  * Pick the first free `stem.ext`, `stem-1.ext`, … and hand it to `place`, which must fail with EEXIST
  * when the target appeared in the meantime (link, copyFile with COPYFILE_EXCL). Never overwrites.
  */
-export async function placeWithoutClobber(
+async function placeWithoutClobber(
 	dir: string,
 	stem: string,
 	extension: string,
@@ -98,8 +102,8 @@ export async function saveAsset(
 	await mkdir(dir, { recursive: true });
 	const stem = slugifyAssetName(input.name ?? "") || pasteAssetName(input.now);
 	const temp = join(dir, `.upload-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
-	await writeFile(temp, result.bytes, { flag: "wx" });
 	try {
+		await writeFile(temp, result.bytes, { flag: "wx" });
 		const target = await placeWithoutClobber(dir, stem, result.extension, (candidate) => link(temp, candidate));
 		return {
 			path: toPublicPath(assetsRoot, target),
@@ -117,7 +121,7 @@ export async function listAssets(assetsRoot: string, taskId?: string | null): Pr
 	const entries: AssetEntry[] = [];
 
 	const walk = async (dir: string): Promise<void> => {
-		let items: import("node:fs").Dirent[];
+		let items: Dirent[];
 		try {
 			items = await readdir(dir, { withFileTypes: true });
 		} catch {
@@ -132,7 +136,12 @@ export async function listAssets(assetsRoot: string, taskId?: string | null): Pr
 			}
 			// Symlinks report neither isFile nor isDirectory here, so they are skipped.
 			if (!item.isFile() || !IMAGE_EXTENSIONS.has(extname(item.name).slice(1).toLowerCase())) continue;
-			const info = await stat(fullPath);
+			let info: Stats;
+			try {
+				info = await stat(fullPath);
+			} catch {
+				continue; // removed between readdir and stat
+			}
 			const parts = relative(assetsRoot, fullPath).split(sep);
 			const owner = parts[0] === "images" && parts.length > 2 ? (parts[1] ?? null) : null;
 			entries.push({

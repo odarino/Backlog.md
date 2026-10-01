@@ -31,6 +31,9 @@ describe("names and folders", () => {
 		expect(slugifyAssetName("Ảnh chụp màn hình (2).JPG")).toBe("anh-chup-man-hinh-2");
 		expect(slugifyAssetName("../../etc/passwd")).toBe("passwd");
 		expect(slugifyAssetName("")).toBe("");
+		expect(slugifyAssetName(`${"a".repeat(79)} b.png`)).toBe("a".repeat(79));
+		expect(slugifyAssetName("con.png")).toBe("con-image");
+		expect(slugifyAssetName("COM1.png")).toBe("com1-image");
 	});
 
 	it("names pasted images by local time", () => {
@@ -99,7 +102,7 @@ describe("saveAsset", () => {
 		const cases: Array<[Uint8Array, 400 | 413 | 415 | 422]> = [
 			[new Uint8Array(MAX_ASSET_BYTES + 1), 413],
 			[new TextEncoder().encode("plain text"), 415],
-			// A corrupt PNG: the JPEG decoder prints diagnostics to console.error, which would pollute test output.
+			[new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x01, 0x02]), 422],
 			[new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]), 422],
 			[new Uint8Array(), 400],
 		];

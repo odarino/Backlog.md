@@ -105,6 +105,13 @@ async function compileWasm(path: string): Promise<WebAssembly.Module> {
 	return WebAssembly.compile(await Bun.file(path).arrayBuffer());
 }
 
+// mozjpeg writes decoder diagnostics (for example "Premature end of JPEG file") to stderr. Collect them
+// instead of printing, and attach them to the ImageDecodeError of a failed decode.
+let codecMessages: string[] = [];
+function collectCodecMessage(message: string): void {
+	codecMessages.push(message);
+}
+
 // The .wasm files are embedded in the compiled binary; Bun.file reads them from the embedded paths.
 function ensureCodecs(): Promise<void> {
 	codecsReady ??= (async () => {
@@ -118,7 +125,11 @@ function ensureCodecs(): Promise<void> {
 			compileWasm(resizeWasm),
 		]);
 		await Promise.all([
-			initJpegDecode(jpegModule),
+			// The typings omit the (module, overrides) form that the runtime supports.
+			(initJpegDecode as (module: unknown, overrides: object) => Promise<void>)(jpegModule, {
+				print: collectCodecMessage,
+				printErr: collectCodecMessage,
+			}),
 			initPngDecode(pngModule),
 			initWebpDecode(webpDecodeModule),
 			initWebpEncode(webpEncodeModule),
@@ -134,6 +145,7 @@ function ensureCodecs(): Promise<void> {
 async function decode(kind: "jpeg" | "png" | "webp", bytes: Uint8Array): Promise<ImageData> {
 	const buffer = bytes.slice().buffer;
 	let image: ImageData | null | undefined;
+	codecMessages = [];
 	try {
 		if (kind === "jpeg") {
 			// Despite its name, preserveOrientation: true applies the EXIF orientation to the pixels.
@@ -144,7 +156,8 @@ async function decode(kind: "jpeg" | "png" | "webp", bytes: Uint8Array): Promise
 			image = await decodeWebp(buffer);
 		}
 	} catch (error) {
-		throw new ImageDecodeError(`Could not decode ${kind} image: ${error instanceof Error ? error.message : error}`);
+		const detail = codecMessages.length > 0 ? codecMessages.join("; ") : error instanceof Error ? error.message : error;
+		throw new ImageDecodeError(`Could not decode ${kind} image: ${detail}`);
 	}
 	if (!image) throw new ImageDecodeError(`Could not decode ${kind} image`);
 	return image;
