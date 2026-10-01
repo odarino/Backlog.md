@@ -383,3 +383,22 @@ export interface ParsedMarkdown {
 	frontmatter: Record<string, unknown>;
 	content: string;
 }
+
+/** An image file under backlog/assets, as listed for the picker. */
+export interface AssetEntry {
+	/** Public URL path, e.g. /assets/images/task-12/shot.webp */
+	path: string;
+	name: string;
+	size: number;
+	/** ISO timestamp of the last modification */
+	mtime: string;
+	/** Folder name under images/ (lowercase task ID), or null for other locations and _unsorted */
+	taskId: string | null;
+}
+
+export interface SavedAsset {
+	path: string;
+	originalSize: number;
+	finalSize: number;
+	compressed: boolean;
+}
