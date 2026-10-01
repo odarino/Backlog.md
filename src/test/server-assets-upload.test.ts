@@ -5,7 +5,7 @@ import decodeWebp from "@jsquash/webp/decode";
 import { FileSystem } from "../file-system/operations.ts";
 import { BacklogServer } from "../server/index.ts";
 import type { BacklogConfig } from "../types/index.ts";
-import { jpegFixture } from "./image-fixtures.ts";
+import { jpegFixture, pngFixture } from "./image-fixtures.ts";
 import { createUniqueTestDir, retry, safeCleanup } from "./test-utils.ts";
 
 let TEST_DIR: string;
@@ -90,6 +90,41 @@ describe("asset upload API", () => {
 		const tooBig = await upload("taskId=TASK-3", new Uint8Array(25 * 1024 * 1024 + 1));
 		expect(tooBig.status).toBe(413);
 		expect(await tooBig.json()).toEqual({ error: "Image is larger than 25 MB" });
+	});
+
+	it("rejects an image that declares too many pixels with 422", async () => {
+		const bomb = await pngFixture(16, 16);
+		const view = new DataView(bomb.buffer, bomb.byteOffset);
+		view.setUint32(16, 12000); // IHDR width
+		view.setUint32(20, 12000); // IHDR height
+		const response = await upload("taskId=TASK-3&name=bomb.png", bomb, "image/png");
+		expect(response.status).toBe(422);
+		expect((await response.json()).error).toContain("too large");
+	});
+
+	it("stops a chunked upload without Content-Length as soon as it passes the limit", async () => {
+		const chunk = new Uint8Array(1024 * 1024);
+		const totalChunks = 60;
+		let sent = 0;
+		const body = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				if (sent >= totalChunks) {
+					controller.close();
+					return;
+				}
+				sent += 1;
+				controller.enqueue(chunk);
+			},
+		});
+		const response = await request("/api/assets?taskId=TASK-3", {
+			method: "POST",
+			headers: { "Content-Type": "image/png" },
+			body,
+			duplex: "half",
+		} as RequestInit);
+		expect(response.status).toBe(413);
+		expect(await response.json()).toEqual({ error: "Image is larger than 25 MB" });
+		expect(sent).toBeLessThan(totalChunks);
 	});
 
 	it("serves SVG files sandboxed", async () => {
