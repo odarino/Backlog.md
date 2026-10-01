@@ -392,12 +392,16 @@ which brew                          # /opt/homebrew = arm64 brew, /usr/local = I
 
 If the architectures disagree, reinstall with the native one:
 
-> **Note:** This installs the upstream package, without the fork features.
+> **Note:** The Homebrew formula installs the upstream package, without the fork features.
 
 ```bash
 # Homebrew: make sure `which brew` prints /opt/homebrew, then
 brew reinstall backlog-md
+```
 
+To keep the fork features, use npm or Bun:
+
+```bash
 # npm
 arch -arm64 npm i -g @odarino/backlog.md
 
