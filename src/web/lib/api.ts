@@ -2,10 +2,12 @@ import type { DuplicateRepairPlan, DuplicateRepairResult } from "../../core/dupl
 import type { TaskStatistics } from "../../core/statistics.ts";
 import type { TaskDetail } from "../../core/task-detail.ts";
 import type {
+	AssetEntry,
 	BacklogConfig,
 	Decision,
 	Document,
 	Milestone,
+	SavedAsset,
 	SearchPriorityFilter,
 	SearchResult,
 	SearchResultType,
@@ -435,6 +437,26 @@ export class ApiClient {
 			throw new Error("Failed to fetch config");
 		}
 		return response.json();
+	}
+
+	async listAssets(taskId?: string): Promise<AssetEntry[]> {
+		const query = taskId ? `?taskId=${encodeURIComponent(taskId)}` : "";
+		return this.fetchJson<AssetEntry[]>(`${API_BASE}/assets${query}`);
+	}
+
+	async uploadAsset(file: Blob, name: string, taskId?: string): Promise<SavedAsset> {
+		const params = new URLSearchParams({ name });
+		if (taskId) params.set("taskId", taskId);
+		// Raw body upload: fetchWithRetry forces a JSON content type, so use fetch directly.
+		const response = await fetch(`${API_BASE}/assets?${params.toString()}`, {
+			method: "POST",
+			headers: { "Content-Type": file.type || "application/octet-stream" },
+			body: file,
+		});
+		if (!response.ok) {
+			throw ApiError.fromResponse(response);
+		}
+		return (await response.json()) as SavedAsset;
 	}
 
 	async updateConfig(config: BacklogConfig): Promise<BacklogConfig> {
