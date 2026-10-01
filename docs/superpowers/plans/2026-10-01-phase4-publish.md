@@ -249,3 +249,4 @@ This is a fork of [MrLesk/Backlog.md](https://github.com/MrLesk/Backlog.md) with
    - github-release
    - sync-version
 5. Smoke test after publishing: `npm view @odarino/backlog.md version` prints `1.54.0`. Then, in a temp directory, run `npx -y @odarino/backlog.md@1.54.0 --version`.
+6. Refresh the lockfiles after the first publish. When the scoped platform packages exist on npm, `bun install` resolves the `"*"` optional dependencies again. Run `bun install` and `bun run update-nix`. Check that `bun install --frozen-lockfile` passes and that `git diff --exit-code -- bun.nix` is clean after a second `update-nix`. Commit `chore(release): refresh lockfiles after the first scoped publish`. Without this step, the frozen install in CI can fail on the next push.
