@@ -68,7 +68,8 @@ const Settings: React.FC = () => {
 						}
 					: fresh,
 			);
-			await loadStatuses();
+			if (result.config) setStatuses(result.config.statuses);
+			else await loadStatuses();
 			if (result.error) {
 				setError(`${result.error}. Some changes were saved; the workflow was reloaded.`);
 			} else {
