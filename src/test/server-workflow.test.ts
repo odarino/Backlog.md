@@ -260,6 +260,28 @@ describe("PUT /api/config status rules", () => {
 		}
 	});
 
+	it("keeps a color saved next to concurrent reads when a later rename runs", async () => {
+		for (let round = 0; round < 4; round++) {
+			const current = await getConfig();
+			const statuses = current.statuses as string[];
+			await Promise.all([
+				getStatuses(),
+				getConfig(),
+				request("/api/config", {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ ...current, statusColors: { Done: `#10b98${round}` } }),
+				}),
+				getConfig(),
+				getStatuses(),
+			]);
+			const from = statuses[1] as string;
+			expect((await post("/api/statuses/rename", { from, to: `Doing ${round}` })).status).toBe(200);
+			const text = await Bun.file(core.filesystem.configFilePath).text();
+			expect(text).toContain(`status_colors: {"Done":"#10b98${round}"}`);
+		}
+	});
+
 	it("still saves a body without statuses", async () => {
 		const { statuses: _statuses, ...rest } = (await (await request("/api/config")).json()) as Record<string, unknown>;
 		const response = await request("/api/config", {

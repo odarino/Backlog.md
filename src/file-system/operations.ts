@@ -360,6 +360,8 @@ export class FileSystem {
 	private readonly projectRoot: string;
 	private cachedConfig: BacklogConfig | null = null;
 	private cachedConfigSnapshot: { path: string; content: string } | null = null;
+	/** Bumped whenever the config cache is set or cleared, so a read that started earlier does not overwrite it. */
+	private configGeneration = 0;
 	private readonly parsedTaskFiles = new Map<string, ParsedTaskFile>();
 	private taskParseCacheEpoch = 0;
 	private taskFileReadGeneration = 0;
@@ -424,6 +426,7 @@ export class FileSystem {
 	invalidateConfigCache(): void {
 		this.cachedConfig = null;
 		this.cachedConfigSnapshot = null;
+		this.configGeneration += 1;
 		this.refreshConfigResolution();
 	}
 
@@ -447,6 +450,7 @@ export class FileSystem {
 		}
 		this.cachedConfig = config;
 		this.cachedConfigSnapshot = { path: sourceConfigPath, content };
+		this.configGeneration += 1;
 		return true;
 	}
 
@@ -2059,6 +2063,7 @@ ${description || `Milestone: ${title}`}`,
 			return this.cachedConfig;
 		}
 
+		const generation = this.configGeneration;
 		const configPath = this.resolvedConfigPath;
 		let content: string;
 		try {
@@ -2075,8 +2080,10 @@ ${description || `Milestone: ${title}`}`,
 		// A value Backlog cannot read is reported, not swallowed: callers must not silently
 		// fall back to defaults while the config file says something else.
 		const config = this.parseConfig(content);
-		this.cachedConfig = config;
-		this.cachedConfigSnapshot = { path: configPath, content };
+		if (generation === this.configGeneration) {
+			this.cachedConfig = config;
+			this.cachedConfigSnapshot = { path: configPath, content };
+		}
 		return config;
 	}
 
@@ -2094,6 +2101,7 @@ ${description || `Milestone: ${title}`}`,
 		await Bun.write(configPath, content);
 		this.cachedConfig = normalizedConfig;
 		this.cachedConfigSnapshot = { path: configPath, content };
+		this.configGeneration += 1;
 	}
 
 	// Utility methods

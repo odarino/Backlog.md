@@ -431,6 +431,33 @@ describe("workflow status changes", () => {
 		expect(await Bun.file(configPath).text()).toBe(edited);
 	});
 
+	it("keeps other config changes saved on disk during the change", async () => {
+		const configPath = core.fs.configFilePath;
+		const originalSaveTask = core.fs.saveTask;
+		let edited = false;
+		core.fs.saveTask = async (task) => {
+			if (!edited) {
+				edited = true;
+				// Another writer changes the colors and the project name while the task files are rewritten.
+				const text = (await Bun.file(configPath).text())
+					.replace(/^status_colors:.*$/m, 'status_colors: {"Review":"#8b5cf6","Done":"#10b981"}')
+					.replace(/^project_name:.*$/m, 'project_name: "Edited"');
+				await Bun.write(configPath, text);
+			}
+			return await originalSaveTask.call(core.fs, task);
+		};
+		try {
+			await renameStatus(core, "Review", "QA");
+		} finally {
+			core.fs.saveTask = originalSaveTask;
+		}
+		const config = await new Core(TEST_DIR).fs.loadConfig();
+		expect(config?.statuses).toEqual(["To Do", "In Progress", "QA", "Done"]);
+		expect(config?.statusColors).toEqual({ QA: "#8b5cf6", Done: "#10b981" });
+		expect(config?.projectName).toBe("Edited");
+		expect(config?.defaultStatus).toBe("QA");
+	});
+
 	it("removeStatus returns 409 when a task starts using the status during the change", async () => {
 		const config = await core.fs.loadConfig();
 		if (!config) throw new Error("config missing");
