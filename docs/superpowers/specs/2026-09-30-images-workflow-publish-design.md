@@ -186,14 +186,16 @@ If tasks use the status, a dialog shows "N tasks use '<status>'. Move them to: [
 
 One implementation in core for rename and remove:
 
-- Rewrites `status:` in all local task files: active, drafts, completed, archived. Uses the existing task upsert and lock path, not raw text replacement.
+- Rewrites `status:` in all local task files under `tasks/`, `completed/` and `archive/tasks/` (drafts always have status `Draft`, so they are skipped). Each file is saved under its task lock with only `status` changed; `onStatusChange` callbacks do not run. On failure, already rewritten tasks are restored.
+- `PUT /api/config` may reorder statuses and add new ones, but it rejects a list that drops or renames an existing status (409); only the rename and remove endpoints do that. `GET /api/statuses/usage` returns task counts for the delete dialog.
+- A long-running MCP server keeps its old status list until it restarts (documented limit).
 - Updates `default_status` on rename. On remove of the default status, `default_status` becomes the first status.
 - With `auto_commit` on, all changed files go into one git commit.
 - Tasks that exist only on other git branches are not rewritten. They show an unknown status until merged. This limit is documented, not handled.
 
 ### Colors
 
-New config key `status_colors` (map of status name to hex color). Rename and remove update the map. Board column headers and task card status chips use it. A status without a color keeps the current default style. Web UI only.
+New config key `status_colors` (map of status name to hex color, written as a JSON-quoted flow map). Rename and remove update the map. Board column headers and the task list status chip use it (board cards have no status chip). A status without a color keeps the current default style. Web UI only.
 
 ### Tests
 
