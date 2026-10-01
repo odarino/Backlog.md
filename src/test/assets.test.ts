@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, readdir, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	AssetError,
@@ -7,6 +7,7 @@ import {
 	listAssets,
 	MAX_ASSET_BYTES,
 	pasteAssetName,
+	placeFile,
 	saveAsset,
 	slugifyAssetName,
 } from "../core/assets.ts";
@@ -113,6 +114,32 @@ describe("saveAsset", () => {
 		}
 		const taskDir = join(root, "images", "task-1");
 		expect(await readdir(taskDir).catch(() => [])).toEqual([]);
+	});
+});
+
+describe("placeFile", () => {
+	const failingLink = (code: string) => async () => {
+		throw Object.assign(new Error(`link failed: ${code}`), { code });
+	};
+
+	it("copies when the file system has no hard links, and still never overwrites", async () => {
+		const source = join(root, "source.bin");
+		await writeFile(source, "data");
+		for (const code of ["EPERM", "ENOTSUP", "ENOSYS", "EXDEV"]) {
+			const target = join(root, `target-${code}.bin`);
+			await placeFile(source, target, failingLink(code));
+			expect(await readFile(target, "utf8")).toBe("data");
+			await expect(placeFile(source, target, failingLink(code))).rejects.toMatchObject({ code: "EEXIST" });
+		}
+	});
+
+	it("passes other link errors through", async () => {
+		const source = join(root, "source.bin");
+		await writeFile(source, "data");
+		await expect(placeFile(source, join(root, "t.bin"), failingLink("EACCES"))).rejects.toMatchObject({
+			code: "EACCES",
+		});
+		expect(await readdir(root)).toEqual(["source.bin"]);
 	});
 });
 
