@@ -1,7 +1,7 @@
 const { execFileSync } = require("node:child_process");
 
 function getPackageName(platform = process.platform, arch = process.arch) {
-	return `backlog.md-${platform === "win32" ? "windows" : platform}-${arch}`;
+	return `@odarino/backlog.md-${platform === "win32" ? "windows" : platform}-${arch}`;
 }
 
 /**
