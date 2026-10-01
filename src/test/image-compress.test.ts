@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import decodeWebp from "@jsquash/webp/decode";
 import encodeWebp from "@jsquash/webp/encode";
 import {
@@ -65,20 +65,6 @@ describe("compressOptionsFromConfig", () => {
 });
 
 describe("compressImage", () => {
-	// The mozjpeg decoder binds console.error when the codecs load (first compressImage call).
-	// Install the capture before that call, and forward everything outside the capture window.
-	const originalConsoleError = console.error;
-	let captured: string[] | null = null;
-	beforeAll(() => {
-		console.error = (...args: unknown[]) => {
-			if (captured) captured.push(args.join(" "));
-			else originalConsoleError(...args);
-		};
-	});
-	afterAll(() => {
-		console.error = originalConsoleError;
-	});
-
 	it("resizes a large JPEG and encodes a smaller WebP", async () => {
 		const input = await jpegFixture(2400, 1600);
 		const result = await compressImage(input, { maxDimension: 1920, quality: 0.8 });
@@ -130,15 +116,9 @@ describe("compressImage", () => {
 
 	it("rejects a corrupt JPEG with ImageDecodeError", async () => {
 		const corrupt = new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x01, 0x02, 0x03]);
-		captured = [];
-		try {
-			await expect(compressImage(corrupt, { maxDimension: 1920, quality: 0.8 })).rejects.toBeInstanceOf(
-				ImageDecodeError,
-			);
-			expect(captured.join("\n")).toContain("JPEG");
-		} finally {
-			captured = null;
-		}
+		const error = await compressImage(corrupt, { maxDimension: 1920, quality: 0.8 }).catch((e) => e);
+		expect(error).toBeInstanceOf(ImageDecodeError);
+		expect((error as Error).message).toContain("JPEG");
 	});
 
 	it("rejects unknown data with UnsupportedImageError", async () => {
