@@ -261,6 +261,22 @@
     url = "https://registry.npmjs.org/@jimp/utils/-/utils-1.6.1.tgz";
     hash = "sha512-veFPRd93FCnS7AgmCkPgARVGoDRrJ9cm1ujuNyA+UfQ5VKbED2002sm5XfFLFwTsKC8j04heTrwe+tU1dluXOw==";
   };
+  "@jsquash/jpeg@1.6.0" = fetchurl {
+    url = "https://registry.npmjs.org/@jsquash/jpeg/-/jpeg-1.6.0.tgz";
+    hash = "sha512-zwN46Awh1VM6gXlIcALwb5WzqK5H2e6+Awcs1QP8AvS8ohsK/sbE4esvmH4jhlhW7+CgiUUww66vg0aTnlSIMA==";
+  };
+  "@jsquash/png@3.1.1" = fetchurl {
+    url = "https://registry.npmjs.org/@jsquash/png/-/png-3.1.1.tgz";
+    hash = "sha512-C10pc+0H6j0h8fENOfnGOvkXCmvpSQTDGlfGd0sHphZhPSGTyLjIrHba0FaZZdsKqA/wlmhYicUHb92vfZphaw==";
+  };
+  "@jsquash/resize@2.1.1" = fetchurl {
+    url = "https://registry.npmjs.org/@jsquash/resize/-/resize-2.1.1.tgz";
+    hash = "sha512-0R5UL1ZLHUT+carjVikcE1QfA+kfNQ2YamYyGVRmhfh4zttU5EY3bQBGxPIPtY2xIAw1P4Kgyxm2xrceRw1r2w==";
+  };
+  "@jsquash/webp@1.5.0" = fetchurl {
+    url = "https://registry.npmjs.org/@jsquash/webp/-/webp-1.5.0.tgz";
+    hash = "sha512-KggLoj2MnRSfIqTeKe1EmbljTX2vuV7mh79k89PCL1pyqiDULcPM1L47twxXt0hkb68F70bXiL31MxsuoZtKFw==";
+  };
   "@mermaid-js/parser@1.2.0" = fetchurl {
     url = "https://registry.npmjs.org/@mermaid-js/parser/-/parser-1.2.0.tgz";
     hash = "sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==";
@@ -2281,6 +2297,10 @@
     url = "https://registry.npmjs.org/w3c-xmlserializer/-/w3c-xmlserializer-5.0.0.tgz";
     hash = "sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==";
   };
+  "wasm-feature-detect@1.9.0" = fetchurl {
+    url = "https://registry.npmjs.org/wasm-feature-detect/-/wasm-feature-detect-1.9.0.tgz";
+    hash = "sha512-zonE+xlIIYtxPy++L24ow0hAD8CICb4+FgPyROd3buyXIqsJvUEDkBgfCCoXOd1Hu3DUr0GOfnPIdcGV+YpNaA==";
+  };
   "web-namespaces@2.0.1" = fetchurl {
     url = "https://registry.npmjs.org/web-namespaces/-/web-namespaces-2.0.1.tgz";
     hash = "sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==";
@@ -2336,6 +2356,10 @@
   "yaml@2.9.0" = fetchurl {
     url = "https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz";
     hash = "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==";
+  };
+  "yet-another-react-lightbox@3.32.2" = fetchurl {
+    url = "https://registry.npmjs.org/yet-another-react-lightbox/-/yet-another-react-lightbox-3.32.2.tgz";
+    hash = "sha512-F4HtHQfUNpvkj+AmECgWM4XRdCqMY5gXpKgOUx39+T+FyxLe8II4SK/pwMyYj2X54KH9lFSQeHYY1/GfYf3SdA==";
   };
   "zod-to-json-schema@3.25.2" = fetchurl {
     url = "https://registry.npmjs.org/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz";
