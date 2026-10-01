@@ -97,23 +97,22 @@ export async function renameStatus(
 
 		const sourceKey = statusKey(source);
 		const renamed = (name: string) => (statusKey(name) === sourceKey ? target : name);
-		const nextConfig: BacklogConfig = {
-			...config,
-			statuses: config.statuses.map(renamed),
-			...(config.defaultStatus ? { defaultStatus: renamed(config.defaultStatus) } : {}),
-			...(config.statusColors
-				? {
-						statusColors: Object.fromEntries(
-							Object.entries(config.statusColors).map(([name, color]) => [renamed(name), color]),
-						),
-					}
-				: {}),
-		};
 		return await applyStatusChange(core, {
 			source,
 			target,
 			baseStatuses: config.statuses,
-			nextConfig,
+			buildConfig: (latest) => ({
+				...latest,
+				statuses: latest.statuses.map(renamed),
+				...(latest.defaultStatus ? { defaultStatus: renamed(latest.defaultStatus) } : {}),
+				...(latest.statusColors
+					? {
+							statusColors: Object.fromEntries(
+								Object.entries(latest.statusColors).map(([name, color]) => [renamed(name), color]),
+							),
+						}
+					: {}),
+			}),
 			message: () => `Rename status "${source}" to "${target}"`,
 			autoCommit,
 		});
@@ -144,23 +143,24 @@ export async function removeStatus(
 			if (!target) throw new WorkflowError(`Unknown target status: ${moveTo}`, 400);
 		}
 
-		const nextConfig: BacklogConfig = {
-			...config,
-			statuses: remaining,
-			...(config.defaultStatus && statusKey(config.defaultStatus) === sourceKey ? { defaultStatus: remaining[0] } : {}),
-			...(config.statusColors
-				? {
-						statusColors: Object.fromEntries(
-							Object.entries(config.statusColors).filter(([name]) => statusKey(name) !== sourceKey),
-						),
-					}
-				: {}),
-		};
 		return await applyStatusChange(core, {
 			source: removed,
 			target,
 			baseStatuses: config.statuses,
-			nextConfig,
+			buildConfig: (latest) => ({
+				...latest,
+				statuses: latest.statuses.filter((name) => statusKey(name) !== sourceKey),
+				...(latest.defaultStatus && statusKey(latest.defaultStatus) === sourceKey
+					? { defaultStatus: remaining[0] }
+					: {}),
+				...(latest.statusColors
+					? {
+							statusColors: Object.fromEntries(
+								Object.entries(latest.statusColors).filter(([name]) => statusKey(name) !== sourceKey),
+							),
+						}
+					: {}),
+			}),
 			message: (moved) =>
 				`Remove status "${removed}"${target && moved > 0 ? ` (moved ${moved} tasks to "${target}")` : ""}`,
 			autoCommit,
@@ -231,7 +231,8 @@ async function applyStatusChange(
 		source: string;
 		target: string | undefined;
 		baseStatuses: string[];
-		nextConfig: BacklogConfig;
+		/** Builds the config to save from the one read just before the save. */
+		buildConfig: (latest: BacklogConfig & { statuses: string[] }) => BacklogConfig;
 		message: (changedTasks: number) => string;
 		autoCommit: boolean | undefined;
 	},
@@ -241,6 +242,7 @@ async function applyStatusChange(
 	// A task already in the target spelling is done, which matters for a case-only rename.
 	const usesSource = (status = "") => statusKey(status) === sourceKey && status !== target;
 	const rewritten: RewrittenTask[] = [];
+	let nextConfig: BacklogConfig;
 	try {
 		if (target) {
 			for (const candidate of (await listWorkflowTasks(core)).filter(({ task }) => usesSource(task.status))) {
@@ -256,7 +258,8 @@ async function applyStatusChange(
 		if (!sameStatuses(latest.config.statuses, change.baseStatuses)) {
 			throw new WorkflowError("The workflow changed while saving. Reload and try again.", 409);
 		}
-		await core.fs.saveConfig(change.nextConfig);
+		nextConfig = change.buildConfig(latest.config);
+		await core.fs.saveConfig(nextConfig);
 	} catch (error) {
 		const unrestored = await restoreTasks(core, rewritten);
 		if (unrestored.length > 0 && error instanceof Error) {
@@ -289,7 +292,7 @@ async function applyStatusChange(
 		}
 	}
 
-	return { config: (await core.fs.loadConfig()) ?? change.nextConfig, changedTasks: rewritten.length };
+	return { config: (await core.fs.loadConfig()) ?? nextConfig, changedTasks: rewritten.length };
 }
 
 /**
