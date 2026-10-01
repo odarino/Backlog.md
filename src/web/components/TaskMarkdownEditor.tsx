@@ -1,4 +1,4 @@
-import MDEditor from "@uiw/react-md-editor";
+import MDEditor, { commands as mdCommands, type ICommand } from "@uiw/react-md-editor";
 import { type ClipboardEvent, type DragEvent, useEffect, useRef, useState } from "react";
 import { apiClient } from "../lib/api";
 import {
@@ -10,6 +10,7 @@ import {
 	uploadPlaceholder,
 	uploadToastMessage,
 } from "../lib/markdown-image-insert";
+import AssetPickerModal from "./AssetPickerModal";
 import { SuccessToast } from "./SuccessToast";
 
 interface Props {
@@ -33,7 +34,7 @@ interface PendingUpload {
 	label: string;
 }
 
-export default function TaskMarkdownEditor({ value, onChange, taskId, height, colorMode, placeholder }: Props) {
+export default function TaskMarkdownEditor({ value, onChange, taskId, height, colorMode, placeholder, onOverlayChange }: Props) {
 	// Uploads finish after later keystrokes, so edits always start from the latest value.
 	const valueRef = useRef(value);
 	valueRef.current = value;
@@ -41,6 +42,24 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 	onChangeRef.current = onChange;
 	const queueRef = useRef<Promise<void>>(Promise.resolve());
 	const [toast, setToast] = useState<Toast | null>(null);
+	const [pickerOpen, setPickerOpen] = useState(false);
+	const selectionRef = useRef({ start: value.length, end: value.length });
+	const onOverlayChangeRef = useRef(onOverlayChange);
+	onOverlayChangeRef.current = onOverlayChange;
+	const pickerOpenRef = useRef(false);
+
+	useEffect(() => {
+		pickerOpenRef.current = pickerOpen;
+		onOverlayChangeRef.current?.(pickerOpen);
+	}, [pickerOpen]);
+
+	// If the editor unmounts while the picker is open, the parent must not stay in "overlay open".
+	useEffect(
+		() => () => {
+			if (pickerOpenRef.current) onOverlayChangeRef.current?.(false);
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!toast) return;
@@ -97,12 +116,30 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 		);
 	};
 
+	const pickerCommand: ICommand = {
+		name: "asset-picker",
+		keyCommand: "asset-picker",
+		buttonProps: { "aria-label": "Insert image from assets", title: "Insert image from assets" },
+		icon: (
+			<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+				<rect x="3" y="3" width="18" height="18" rx="2" />
+				<circle cx="8.5" cy="8.5" r="1.5" />
+				<path d="M21 15l-5-5L5 21" />
+			</svg>
+		),
+		execute: (state) => {
+			selectionRef.current = { start: state.selection.start, end: state.selection.end };
+			setPickerOpen(true);
+		},
+	};
+
 	return (
 		<>
 			<MDEditor
 				value={value}
 				onChange={(next) => commit(next || "")}
 				preview="edit"
+				commands={[...mdCommands.getCommands(), mdCommands.divider, pickerCommand]}
 				height={height}
 				data-color-mode={colorMode}
 				textareaProps={{
@@ -113,6 +150,16 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 				}}
 			/>
 			{toast && <SuccessToast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}
+			<AssetPickerModal
+				isOpen={pickerOpen}
+				taskId={taskId}
+				onClose={() => setPickerOpen(false)}
+				onInsert={(markdown) => {
+					const { start, end } = selectionRef.current;
+					commit(insertAtSelection(valueRef.current, start, end, markdown).value);
+				}}
+				onUploaded={(saved) => setToast({ message: uploadToastMessage(saved), tone: "success" })}
+			/>
 		</>
 	);
 }
