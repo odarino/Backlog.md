@@ -254,9 +254,10 @@ describe("BacklogServer task SPA fallback", () => {
 		// The test runner's existing timeout bounds this first-build readiness check;
 		// aborting it early can leave Bun's development bundler with a stale socket.
 		const shellResponse = await fetch(`http://127.0.0.1:${serverPort}/`);
-		expect(shellResponse.status).toBe(200);
+		const shellBody = await shellResponse.text();
+		expect(shellResponse.status, shellBody.slice(0, 2000)).toBe(200);
 		expect(shellResponse.headers.get("content-type")).toContain("text/html");
-		expect(await shellResponse.text()).toContain('<div id="root"></div>');
+		expect(shellBody).toContain('<div id="root"></div>');
 
 		const paths = [
 			"/tasks",
