@@ -78,4 +78,19 @@ describe("status_colors config key", () => {
 		expect(reloaded?.statuses).toEqual(["To Do", "Wait: QA", "Done"]);
 		expect(reloaded?.defaultStatus).toBe("Wait: QA");
 	});
+
+	it("keeps an apostrophe in default_status", async () => {
+		const base = await loadBase();
+		await filesystem.saveConfig({ ...base, statuses: ["To Do", "Bob's", "Done"], defaultStatus: "Bob's" });
+		expect((await new FileSystem(TEST_DIR).loadConfig())?.defaultStatus).toBe("Bob's");
+	});
+
+	it("reads legacy unquoted and single-quoted default_status values", async () => {
+		const path = filesystem.configFilePath;
+		const text = (await Bun.file(path).text()).replace(/^default_status:.*\n/m, "").trimEnd();
+		await Bun.write(path, `${text}\ndefault_status: In Progress\n`);
+		expect((await new FileSystem(TEST_DIR).loadConfig())?.defaultStatus).toBe("In Progress");
+		await Bun.write(path, `${text}\ndefault_status: 'To Do'\n`);
+		expect((await new FileSystem(TEST_DIR).loadConfig())?.defaultStatus).toBe("To Do");
+	});
 });
