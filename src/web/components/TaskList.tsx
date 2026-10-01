@@ -18,6 +18,7 @@ import {
 	getPriorityRank,
 	resolvePriorityValue,
 } from "../../utils/priority-config.ts";
+import { statusChipStyle, statusColorFor } from "../lib/status-colors";
 import CleanupModal from "./CleanupModal";
 import StoredDate from "./StoredDate";
 import AcceptanceCriteriaProgress from "./AcceptanceCriteriaProgress";
@@ -36,6 +37,7 @@ interface TaskListProps {
 	archivedMilestones: Milestone[];
 	onRefreshData?: () => Promise<void>;
 	dateFormat?: string;
+	statusColors?: Record<string, string>;
 	isLoading?: boolean;
 }
 
@@ -122,6 +124,7 @@ const TaskList: React.FC<TaskListProps> = ({
 	archivedMilestones,
 	onRefreshData,
 	dateFormat,
+	statusColors,
 	isLoading = false,
 }) => {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -914,7 +917,10 @@ const TaskList: React.FC<TaskListProps> = ({
 												)}
 											</td>
 											<td className="px-3 py-2.5">
-												<span className={`inline-flex rounded-circle px-2 py-0.5 text-[11px] font-medium ${getStatusColor(task.status)}`}>
+												<span
+													className={`inline-flex rounded-circle px-2 py-0.5 text-[11px] font-medium ${statusColorFor(statusColors, task.status) ? "" : getStatusColor(task.status)}`}
+													style={statusChipStyle(statusColors, task.status)}
+												>
 													{task.status}
 												</span>
 											</td>

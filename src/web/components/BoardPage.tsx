@@ -23,6 +23,7 @@ interface BoardPageProps {
 	loadError?: Error | null;
 	hideEmptyColumns?: boolean;
 	dateFormat?: string;
+	statusColors?: Record<string, string>;
 	availablePriorities?: string[];
 	availableTypes?: string[];
 	availableProjects?: string[];
@@ -44,6 +45,7 @@ export default function BoardPage({
 	loadError,
 	hideEmptyColumns,
 	dateFormat,
+	statusColors,
 	availablePriorities,
 	availableTypes,
 	availableProjects,
@@ -219,6 +221,7 @@ export default function BoardPage({
 				onFiltersChange={handleFiltersChange}
 				hideEmptyColumns={hideEmptyColumns}
 				dateFormat={dateFormat}
+				statusColors={statusColors}
 			/>
 		</div>
 	);
