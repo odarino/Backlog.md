@@ -684,14 +684,40 @@ export class BacklogServer {
 		}
 	}
 
-	private async handleUploadAsset(req: Request): Promise<Response> {
-		const declaredLength = Number(req.headers.get("content-length") ?? "0");
-		if (declaredLength > MAX_ASSET_BYTES) {
-			return Response.json({ error: "Image is larger than 25 MB" }, { status: 413 });
+	/** Read the request body, but stop as soon as it passes `limit` bytes. Null means "too large". */
+	private async readBodyWithLimit(req: Request, limit: number): Promise<Uint8Array | null> {
+		if (!req.body) return new Uint8Array();
+		const reader = req.body.getReader();
+		const chunks: Uint8Array[] = [];
+		let total = 0;
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			total += value.byteLength;
+			if (total > limit) {
+				await reader.cancel().catch(() => {});
+				return null;
+			}
+			chunks.push(value);
 		}
+		const bytes = new Uint8Array(total);
+		let offset = 0;
+		for (const chunk of chunks) {
+			bytes.set(chunk, offset);
+			offset += chunk.byteLength;
+		}
+		return bytes;
+	}
+
+	private async handleUploadAsset(req: Request): Promise<Response> {
+		const tooLarge = () => Response.json({ error: "Image is larger than 25 MB" }, { status: 413 });
+		// A missing or non-numeric Content-Length is unknown; the body reader counts the bytes anyway.
+		const declaredLength = Number(req.headers.get("content-length") ?? Number.NaN);
+		if (Number.isFinite(declaredLength) && declaredLength > MAX_ASSET_BYTES) return tooLarge();
 		try {
 			const url = new URL(req.url);
-			const bytes = new Uint8Array(await req.arrayBuffer());
+			const bytes = await this.readBodyWithLimit(req, MAX_ASSET_BYTES);
+			if (!bytes) return tooLarge();
 			const config = await this.core.filesystem.loadConfig();
 			const saved = await saveAsset(this.assetsRoot(), {
 				bytes,
