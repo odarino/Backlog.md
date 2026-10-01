@@ -161,3 +161,18 @@ describe("isRosettaTranslated", () => {
 		expect(throwing.calls).toHaveLength(1);
 	});
 });
+
+describe("PLATFORM_BINARY_PATH", () => {
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const { PLATFORM_BINARY_PATH } = require("../../scripts/cli.cjs");
+
+	it("matches a scoped platform package binary path", () => {
+		expect(PLATFORM_BINARY_PATH.test("/x/node_modules/@odarino/backlog.md-darwin-arm64/backlog")).toBe(true);
+		expect(PLATFORM_BINARY_PATH.test("C:\\x\\node_modules\\@odarino\\backlog.md-windows-x64\\backlog.exe")).toBe(true);
+	});
+
+	it("does not match the old unscoped path or ordinary arguments", () => {
+		expect(PLATFORM_BINARY_PATH.test("/x/node_modules/backlog.md-darwin-arm64/backlog")).toBe(false);
+		expect(PLATFORM_BINARY_PATH.test("task list")).toBe(false);
+	});
+});

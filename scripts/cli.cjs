@@ -4,6 +4,10 @@ const { spawn } = require("node:child_process");
 const { constants: osConstants } = require("node:os");
 const { getCandidatePackageNames, isRosettaTranslated, resolveBinaryPath } = require("./resolveBinary.cjs");
 
+// Matches a deep path to a platform package binary that some global shims pass as an argument.
+const PLATFORM_BINARY_PATH =
+	/node_modules[/\\]@odarino[/\\]backlog\.md-(darwin|linux|windows)-[^/\\]+[/\\]backlog(\.exe)?$/i;
+
 function printInstallHelp() {
 	console.error(`Detected: ${process.platform}-${process.arch} (Node ${process.version})`);
 	if (process.platform === "darwin") {
@@ -70,8 +74,7 @@ function main() {
 		if (arg === binaryPath) return false;
 		// Filter any accidental deep path to our platform package binary
 		try {
-			const pattern = /node_modules[/\\]@odarino[/\\]backlog\.md-(darwin|linux|windows)-[^/\\]+[/\\]backlog(\.exe)?$/i;
-			return !pattern.test(arg);
+			return !PLATFORM_BINARY_PATH.test(arg);
 		} catch {
 			return true;
 		}
@@ -110,4 +113,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { getSignalExitCode, isArchitectureSignal, isBinaryInstallError };
+module.exports = { PLATFORM_BINARY_PATH, getSignalExitCode, isArchitectureSignal, isBinaryInstallError };
