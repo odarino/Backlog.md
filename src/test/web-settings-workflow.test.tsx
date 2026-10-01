@@ -131,6 +131,31 @@ describe("Settings workflow editor", () => {
 		expect(nameInputs().map((input) => input.value)).toEqual(["To Do", "Review", "Done"]);
 	});
 
+	it("shows the config the save returned, not a later stale read", async () => {
+		await renderSettings();
+		const stale = makeConfig();
+		const saveConfig = apiClient.updateConfig;
+		let updates = 0;
+		apiClient.updateConfig = async (config) => {
+			updates += 1;
+			const saved = await saveConfig(config);
+			// From now on a read returns the list from before the save, as a stale cache can.
+			apiClient.fetchConfig = async () => stale;
+			apiClient.fetchStatuses = async () => [...stale.statuses];
+			return saved;
+		};
+		await typeInto(byLabel("New status"), "Blocked");
+		await click(buttonByText("Add"));
+		await click(buttonByText("Save workflow"));
+		await tick();
+		await tick();
+		expect(updates).toBe(1);
+		expect(nameInputs().map((input) => input.value)).toEqual(["To Do", "In Progress", "Review", "Blocked", "Done"]);
+		// The editor compares against the saved config, so nothing is left to save.
+		expect(buttonByText("Save workflow").disabled).toBe(true);
+		expect(document.body.textContent).toContain("Workflow saved");
+	});
+
 	it("shows the success toast and no unsaved changes after a workflow save", async () => {
 		await renderSettings();
 		await click(byLabel("Delete In Progress"));

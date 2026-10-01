@@ -50,10 +50,11 @@ const Settings: React.FC = () => {
 		}
 	};
 
-	// Refresh the workflow fields from the server and keep the user's other unsaved edits.
-	const reloadWorkflow = async (result: { error?: string }) => {
+	// Refresh the workflow fields and keep the user's other unsaved edits. A full save hands over the
+	// saved config; after an error the config is read from the server again.
+	const reloadWorkflow = async (result: { error?: string; config?: BacklogConfig }) => {
 		try {
-			const fresh = await apiClient.fetchConfig();
+			const fresh = result.config ?? (await apiClient.fetchConfig());
 			const previousDefault = originalConfig?.defaultStatus;
 			setOriginalConfig(fresh);
 			setConfig((current) =>
