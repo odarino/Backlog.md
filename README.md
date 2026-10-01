@@ -15,6 +15,7 @@
 
 <p align="center">
 <code>npm i -g @odarino/backlog.md</code>
+</p>
 
 ## About this fork
 
@@ -22,12 +23,14 @@ This is a fork of [MrLesk/Backlog.md](https://github.com/MrLesk/Backlog.md) with
 
 > **Note:** Do not install this package and the original `backlog.md` globally at the same time. Both provide the `backlog` command. Uninstall one first: `npm uninstall -g backlog.md`.
 
+Homebrew and Nix install the upstream package, which does not have the fork features.
+
 ### Fork features
 
 - **Image zoom.** Click an image in a task, a document, or a decision to open it full screen. Zoom with the mouse wheel, a double-click, or a pinch. Drag to pan. Use the arrow keys to move between all images of the task.
-- **Image upload, paste, and drag-drop.** Paste a screenshot or drop image files into any task editor. The server compresses each image to WebP and saves it under `backlog/assets/images/<task-id>/`. Images that you add before a task has an ID go to `_unsorted/`, and they move to the task folder when you create the task.
+- **Image upload, paste, and drag-drop.** Paste a screenshot or drop image files into any task editor. The server compresses each image to WebP and saves it under `backlog/assets/images/<task-id>/`. Images that you add before a task has an ID go to `_unsorted/`, and they move to the task folder when you create the task. An image that another task also links is copied, not moved.
 - **Image picker.** The image button in the editor toolbar opens a picker. Search, select, and insert existing images, or upload new ones.
-- **Workflow editor.** In Settings, add, rename, reorder, color, and delete statuses. A rename or delete rewrites the affected tasks in `tasks/`, `completed/`, and `archive/`. Status colors show on the board columns and in the task list.
+- **Workflow editor.** In Settings, add, rename, reorder, color, and delete statuses. A rename or delete rewrites the affected tasks in `tasks/`, `completed/`, and `archive/tasks/`. Status colors show on the board columns and in the task list.
 - **Safer local server.** The web server rejects requests from other websites and DNS rebinding.
 
 ### Configuration
@@ -47,7 +50,6 @@ This is a fork of [MrLesk/Backlog.md](https://github.com/MrLesk/Backlog.md) with
 - Tasks that exist only on other git branches are not rewritten when you rename or delete a status.
 - Two processes that change the workflow at the same moment can still conflict. Reload and try again.
 - The web UI accepts only `http://127.0.0.1:<port>` and `http://localhost:<port>`. Access through a tunnel or a proxy is blocked.
-</p>
 
 ![Backlog demo GIF using: backlog board](./.github/backlog-v1.40.gif)
 
@@ -111,8 +113,6 @@ Backlog.md itself. The full task ledger lives in this repo's [backlog folder](ba
 # Install
 npm i -g @odarino/backlog.md
 # or: bun add -g @odarino/backlog.md
-# or: brew install backlog-md
-# or: nix run github:MrLesk/Backlog.md
 
 # Initialize in any Git repo
 backlog init "My Awesome Project"
@@ -127,6 +127,8 @@ backlog init "Personal Planning" --no-git
 > (With `@odarino/backlog.md` installed as a project dependency, `npx backlog` runs the local binary as usual.)
 
 ### Run with Nix
+
+> **Note:** This installs the upstream package, without the fork features.
 
 Run Backlog.md directly from the repository flake:
 
@@ -389,6 +391,8 @@ which brew                          # /opt/homebrew = arm64 brew, /usr/local = I
 ```
 
 If the architectures disagree, reinstall with the native one:
+
+> **Note:** This installs the upstream package, without the fork features.
 
 ```bash
 # Homebrew: make sure `which brew` prints /opt/homebrew, then
