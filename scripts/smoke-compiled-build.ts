@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { jpegFixture } from "../src/test/image-fixtures.ts";
+import { jpegFixture, pngFixture } from "../src/test/image-fixtures.ts";
 
 const executablePath = process.argv[2];
 const expectedVersion = process.argv[3];
@@ -294,6 +294,22 @@ try {
 		);
 		const uploadedFile = await fetchWithTimeout(`${baseUrl}${uploaded.path}`);
 		assert(uploadedFile.headers.get("content-type") === "image/webp", "Uploaded asset is not served as WebP.");
+
+		// Pasted screenshots are PNG files.
+		const pngBytes = await pngFixture(1200, 800);
+		const pngResponse = await fetchWithTimeout(`${baseUrl}/api/assets?taskId=TASK-1&name=smoke.png`, {
+			method: "POST",
+			headers: { "Content-Type": "image/png" },
+			body: new Uint8Array(pngBytes),
+		});
+		assert(pngResponse.status === 200, `PNG upload returned ${pngResponse.status}.`);
+		const uploadedPng = (await pngResponse.json()) as { path: string; compressed: boolean; finalSize: number };
+		assert(
+			uploadedPng.compressed && uploadedPng.finalSize < pngBytes.byteLength,
+			"Compiled binary did not compress the PNG upload.",
+		);
+		const uploadedPngFile = await fetchWithTimeout(`${baseUrl}${uploadedPng.path}`);
+		assert(uploadedPngFile.headers.get("content-type") === "image/webp", "Uploaded PNG is not served as WebP.");
 	} catch (error) {
 		browserFailure = { error };
 	}
