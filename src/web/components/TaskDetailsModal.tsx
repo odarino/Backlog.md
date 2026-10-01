@@ -1,6 +1,7 @@
 import { DEFAULT_STATUSES } from "../../constants/index.ts";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isLocalEditableTask, type AcceptanceCriterion, type Milestone, type Task, type TaskComment } from "../../types";
+import type { TaskCreateInput } from "../../types";
 import { type TaskDetail, taskDependencyGraph, taskReadiness } from "../../core/task-detail";
 import Modal from "./Modal";
 import { apiClient, NetworkError, readDemotionFailureCause, readMovedFailureState } from "../lib/api";
@@ -43,6 +44,8 @@ interface Props {
   definitionOfDoneDefaults?: string[];
   defaultAssignee?: string[];
   dateFormat?: string;
+  prefill?: TaskCreateInput; // Starting values for create mode (clone)
+  onClone?: (task: Task) => void; // Opens a create form prefilled from this task
 }
 
 type Mode = "preview" | "edit" | "create";
@@ -142,6 +145,35 @@ const buildTaskDetailsFormState = ({
   dueDate: task?.dueDate || "",
 });
 
+// Lets the create form start from the same shape an existing task gives it.
+const prefillToTask = (prefill: TaskCreateInput): Task => ({
+  id: "",
+  title: prefill.title,
+  status: "",
+  createdDate: "",
+  description: prefill.description,
+  implementationPlan: prefill.implementationPlan,
+  labels: prefill.labels ?? [],
+  priority: prefill.priority,
+  type: prefill.type,
+  project: prefill.project,
+  milestone: prefill.milestone,
+  assignee: prefill.assignee ?? [],
+  dependencies: prefill.dependencies ?? [],
+  references: prefill.references,
+  modifiedFiles: prefill.modifiedFiles,
+  acceptanceCriteriaItems: (prefill.acceptanceCriteria ?? []).map((item, index) => ({
+    index: index + 1,
+    text: item.text,
+    checked: false,
+  })),
+  definitionOfDoneItems: (prefill.definitionOfDoneAdd ?? []).map((text, index) => ({
+    index: index + 1,
+    text,
+    checked: false,
+  })),
+});
+
 const SectionHeader: React.FC<{ title: string; right?: React.ReactNode }> = ({ title, right }) => (
   <div className="flex items-center justify-between mb-3">
     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 tracking-tight transition-colors duration-200">
@@ -198,9 +230,14 @@ export const TaskDetailsModal: React.FC<Props> = ({
   definitionOfDoneDefaults,
   defaultAssignee,
   dateFormat,
+  prefill,
+  onClone,
 }) => {
   const { theme } = useTheme();
   const isCreateMode = !task;
+  const prefillTask = useMemo(() => (prefill ? prefillToTask(prefill) : undefined), [prefill]);
+  // The record the form starts from: the task itself, or the clone prefill in create mode.
+  const source = task ?? prefillTask;
   const isFromOtherBranch = Boolean(task?.branch);
   // Promoting a draft replaces it with a new task ID, which the Drafts page does through its own
   // Promote action, so the popup shows the draft status without turning the field into a second one.
@@ -224,11 +261,11 @@ export const TaskDetailsModal: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Title field for create mode
-  const [title, setTitle] = useState(task?.title || "");
+  const [title, setTitle] = useState(source?.title || "");
 
   // Editable fields (edit mode)
-  const [description, setDescription] = useState(task?.description || "");
-  const [plan, setPlan] = useState(task?.implementationPlan || "");
+  const [description, setDescription] = useState(source?.description || "");
+  const [plan, setPlan] = useState(source?.implementationPlan || "");
   const [notes, setNotes] = useState(task?.implementationNotes || "");
   const [displayComments, setDisplayComments] = useState<TaskComment[]>(task?.comments ?? []);
   const [commentBody, setCommentBody] = useState("");
@@ -237,7 +274,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
   const [commentsChanged, setCommentsChanged] = useState(false);
   const preserveEditModeAfterCommentRefresh = useRef(false);
   const [finalSummary, setFinalSummary] = useState(task?.finalSummary || "");
-  const [criteria, setCriteria] = useState<AcceptanceCriterion[]>(task?.acceptanceCriteriaItems || []);
+  const [criteria, setCriteria] = useState<AcceptanceCriterion[]>(source?.acceptanceCriteriaItems || []);
   const defaultDefinitionOfDone = useMemo(
     () => (definitionOfDoneDefaults ?? []).map((text, index) => ({ index: index + 1, text, checked: false })),
     [definitionOfDoneDefaults],
@@ -248,7 +285,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
     () => (isCreateMode ? (defaultAssignee ?? []) : []),
     [isCreateMode, defaultAssignee],
   );
-  const initialDefinitionOfDone = task?.definitionOfDoneItems ?? (isCreateMode ? defaultDefinitionOfDone : []);
+  const initialDefinitionOfDone = source?.definitionOfDoneItems ?? (isCreateMode ? defaultDefinitionOfDone : []);
   const [definitionOfDone, setDefinitionOfDone] = useState<AcceptanceCriterion[]>(initialDefinitionOfDone);
   const priorityOptions = useMemo(() => getPriorityOptions(availablePriorities), [availablePriorities]);
   const typeOptions = useMemo(() => getTaskTypeValues(availableTypes), [availableTypes]);
@@ -388,20 +425,20 @@ export const TaskDetailsModal: React.FC<Props> = ({
   }, [milestoneEntities, archivedMilestoneEntities]);
 
   // Sidebar metadata (inline edit)
-  const [status, setStatus] = useState(isDraftMode ? "Draft" : (task?.status || (availableStatuses?.[0] || "To Do")));
-  const [assignee, setAssignee] = useState<string[]>(task?.assignee || createModeAssignee);
-  const [labels, setLabels] = useState<string[]>(task?.labels || []);
-  const [priority, setPriority] = useState<string>(task?.priority || "");
-  const [taskType, setTaskType] = useState<string>(task?.type || "");
-  const [project, setProject] = useState<string>(task?.project || "");
+  const [status, setStatus] = useState(isDraftMode ? "Draft" : (source?.status || (availableStatuses?.[0] || "To Do")));
+  const [assignee, setAssignee] = useState<string[]>(source?.assignee || createModeAssignee);
+  const [labels, setLabels] = useState<string[]>(source?.labels || []);
+  const [priority, setPriority] = useState<string>(source?.priority || "");
+  const [taskType, setTaskType] = useState<string>(source?.type || "");
+  const [project, setProject] = useState<string>(source?.project || "");
   const [typeUpdateError, setTypeUpdateError] = useState<string | null>(null);
   const [isTypeUpdating, setIsTypeUpdating] = useState(false);
   const typeUpdateInFlightRef = useRef(false);
   const typeUpdateRequestRef = useRef(0);
-  const [dependencies, setDependencies] = useState<string[]>(task?.dependencies || []);
-  const [references, setReferences] = useState<string[]>(task?.references || []);
-  const [modifiedFiles, setModifiedFiles] = useState<string[]>(task?.modifiedFiles || []);
-  const [milestone, setMilestone] = useState<string>(task?.milestone || "");
+  const [dependencies, setDependencies] = useState<string[]>(source?.dependencies || []);
+  const [references, setReferences] = useState<string[]>(source?.references || []);
+  const [modifiedFiles, setModifiedFiles] = useState<string[]>(source?.modifiedFiles || []);
+  const [milestone, setMilestone] = useState<string>(source?.milestone || "");
   const [dueDate, setDueDate] = useState<string>(task?.dueDate || "");
   const canonicalTypeSelection = resolveTaskTypeValue(taskType, typeOptions);
   const typeSelectionValue = canonicalTypeSelection ?? taskType;
@@ -456,15 +493,15 @@ export const TaskDetailsModal: React.FC<Props> = ({
 
   // Keep a baseline for dirty-check
   const baseline = useMemo(() => ({
-    title: task?.title || "",
-    description: task?.description || "",
-    plan: task?.implementationPlan || "",
-    notes: task?.implementationNotes || "",
-    finalSummary: task?.finalSummary || "",
-    dueDate: task?.dueDate || "",
-    criteria: JSON.stringify(task?.acceptanceCriteriaItems || []),
-    definitionOfDone: JSON.stringify(task?.definitionOfDoneItems || (isCreateMode ? defaultDefinitionOfDone : [])),
-  }), [task, defaultDefinitionOfDone, isCreateMode]);
+    title: source?.title || "",
+    description: source?.description || "",
+    plan: source?.implementationPlan || "",
+    notes: source?.implementationNotes || "",
+    finalSummary: source?.finalSummary || "",
+    dueDate: source?.dueDate || "",
+    criteria: JSON.stringify(source?.acceptanceCriteriaItems || []),
+    definitionOfDone: JSON.stringify(source?.definitionOfDoneItems || (isCreateMode ? defaultDefinitionOfDone : [])),
+  }), [source, defaultDefinitionOfDone, isCreateMode]);
 
   const isDirty = useMemo(() => {
     return (
@@ -538,7 +575,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
       setTypeUpdateError(null);
     }
     const nextFormState = buildTaskDetailsFormState({
-      task,
+      task: source,
       isCreateMode,
       isDraftMode,
       availableStatuses,
@@ -643,7 +680,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
     previousIsOpen.current = isOpen;
     formBaselineRef.current = nextFormState;
     setError(null);
-  }, [task, isOpen, isCreateMode, isDraftMode, availableStatuses, defaultDefinitionOfDone, createModeAssignee]);
+  }, [source, isOpen, isCreateMode, isDraftMode, availableStatuses, defaultDefinitionOfDone, createModeAssignee]);
 
   const refreshAfterCommentChange = useCallback(() => {
     if (!commentsChanged) return;
@@ -652,21 +689,34 @@ export const TaskDetailsModal: React.FC<Props> = ({
   }, [commentsChanged, onSaved]);
 
   const hasCommentDraft = commentBody.trim() !== "" || commentAuthor.trim() !== "";
-  // Nothing is persisted while creating, so any entered field is unsaved work.
+  // Nothing is persisted while creating, so any entered field is unsaved work. The starting values
+  // (the configured default assignee, or the copied values of a clone) are not the user's work, but
+  // removing or replacing them is.
+  const createStart = useMemo(
+    () =>
+      buildTaskDetailsFormState({
+        task: source,
+        isCreateMode,
+        isDraftMode,
+        availableStatuses,
+        defaultDefinitionOfDone,
+        createModeAssignee,
+      }),
+    [source, isCreateMode, isDraftMode, availableStatuses, defaultDefinitionOfDone, createModeAssignee],
+  );
   const hasCreateModeEntries =
     isCreateMode &&
-    (title.trim() !== "" ||
-      taskType.trim() !== "" ||
-      priority.trim() !== "" ||
-      project.trim() !== "" ||
-      milestone.trim() !== "" ||
-      dueDate.trim() !== "" ||
-      // The prefilled default is not the user's work, but removing or replacing it is.
-      !areJsonEqual(assignee, createModeAssignee) ||
-      labels.length > 0 ||
-      dependencies.length > 0 ||
-      references.length > 0 ||
-      modifiedFiles.length > 0);
+    (title.trim() !== createStart.title.trim() ||
+      taskType.trim() !== createStart.taskType.trim() ||
+      priority.trim() !== createStart.priority.trim() ||
+      project.trim() !== createStart.project.trim() ||
+      milestone.trim() !== createStart.milestone.trim() ||
+      dueDate.trim() !== createStart.dueDate.trim() ||
+      !areJsonEqual(assignee, createStart.assignee) ||
+      !areJsonEqual(labels, createStart.labels) ||
+      !areJsonEqual(dependencies, createStart.dependencies) ||
+      !areJsonEqual(references, createStart.references) ||
+      !areJsonEqual(modifiedFiles, createStart.modifiedFiles));
   const hasUnsavedEdits =
     (mode === "edit" || mode === "create") && (isDirty || hasCommentDraft || hasCreateModeEntries);
 
@@ -846,10 +896,25 @@ export const TaskDetailsModal: React.FC<Props> = ({
       if (isCreateMode) {
         taskData.type = taskType;
         taskData.project = project.trim().length > 0 ? project.trim() : undefined;
+        taskData.references = references;
+        taskData.modifiedFiles = modifiedFiles;
+        if (prefill) {
+          taskData.documentation = prefill.documentation;
+          taskData.parentTaskId = prefill.parentTaskId;
+        }
       }
 
       if (isCreateMode && onSubmit) {
-        Object.assign(taskData, buildDefinitionOfDoneCreatePayload());
+        // A clone sends exactly the checklist on screen, so the configured defaults are not added again.
+        Object.assign(
+          taskData,
+          prefill
+            ? {
+                definitionOfDoneAdd: normalizeChecklistItems(definitionOfDone).map((item) => item.text),
+                disableDefinitionOfDoneDefaults: true,
+              }
+            : buildDefinitionOfDoneCreatePayload(),
+        );
         // Create new task
         await onSubmit({ ...taskData, dueDate: taskData.dueDate ?? undefined } as Partial<Task>);
         // Only close if successful (no error thrown)
@@ -1169,6 +1234,17 @@ export const TaskDetailsModal: React.FC<Props> = ({
 		                  <span className="hidden sm:inline">Demote to draft</span>
 		                </>
 		              )}
+		            </button>
+		          )}
+		          {mode === "preview" && !isCreateMode && !isFromOtherBranch && task && onClone && (
+		            <button
+		              type="button"
+		              onClick={() => onClone(task)}
+		              disabled={demoting}
+		              className="inline-flex items-center px-3 py-2 sm:px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors duration-200"
+		              title="Clone"
+		            >
+		              Clone
 		            </button>
 		          )}
 		          {mode === "preview" && !isCreateMode && !isFromOtherBranch ? (

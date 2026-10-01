@@ -24,6 +24,7 @@ import {
 	type Milestone,
 	type SearchResult,
 	type Task,
+	type TaskCreateInput,
 	type TaskSearchResult,
 } from '../types';
 import { formatDependencyCleanupMessage } from '../utils/dependency-graph';
@@ -31,6 +32,7 @@ import { ApiError, apiClient, readMovedFailureState } from './lib/api';
 import type { TaskDetail } from '../core/task-detail';
 import type { DuplicateRepairPlan } from '../core/duplicate-task-repair';
 import { isValidTaskId } from '../utils/task-id';
+import { buildTaskCloneInput } from '../utils/task-clone';
 import { useHealthCheckContext } from './contexts/HealthCheckContext';
 import { getWebVersion } from './utils/version';
 import { collectArchivedMilestoneKeys, collectMilestoneIds, milestoneKey } from './utils/milestones';
@@ -196,7 +198,7 @@ const canonicalizeMilestone = (value: string | null | undefined, aliasMap?: Map<
  */
 type TaskModalState =
   | { kind: 'closed' }
-  | { kind: 'create'; isDraft: boolean }
+  | { kind: 'create'; isDraft: boolean; prefill?: TaskCreateInput }
   | {
       kind: 'detail';
       session: number;
@@ -516,6 +518,14 @@ function AppContent() {
 
   const handleNewTask = () => {
     setModal({ kind: 'create', isDraft: false });
+  };
+
+  const handleCloneTask = (task: Task) => {
+    setModal({
+      kind: 'create',
+      isDraft: (task.status ?? '').toLowerCase() === 'draft',
+      prefill: buildTaskCloneInput(task),
+    });
   };
 
   const handleNewDraft = () => {
@@ -1077,6 +1087,8 @@ function AppContent() {
         onClose={handleCloseModal}
         onSaved={refreshData}
         onSubmit={handleSubmitTask}
+        prefill={modal.kind === 'create' ? modal.prefill : undefined}
+        onClone={handleCloneTask}
         onArchive={editingTask ? () => handleArchiveTask(editingTask.id) : undefined}
         onDependencyCleanup={reportDependencyCleanup}
         availableStatuses={isDraftMode ? ['Draft', ...statuses] : statuses}

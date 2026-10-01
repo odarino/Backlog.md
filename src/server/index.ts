@@ -1142,6 +1142,7 @@ export class BacklogServer {
 				assignee: payload.assignee,
 				dependencies: payload.dependencies,
 				references: payload.references,
+				documentation: Array.isArray(payload.documentation) ? payload.documentation : undefined,
 				modifiedFiles: payload.modifiedFiles,
 				parentTaskId: payload.parentTaskId,
 				implementationPlan: payload.implementationPlan,
