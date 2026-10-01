@@ -53,6 +53,23 @@ describe("BacklogServer due date endpoints", () => {
 			body: JSON.stringify(body),
 		});
 
+	it("ignores a non-array references, modifiedFiles, or documentation on create", async () => {
+		const response = await handlers.handleCreateTask(
+			jsonRequest("/api/tasks", "POST", {
+				title: "Loose payload",
+				references: "x",
+				modifiedFiles: "y",
+				documentation: "z",
+			}),
+		);
+		expect(response.status).toBe(201);
+		const created = (await response.json()) as Task;
+		const stored = await new FileSystem(testDir).loadTask(created.id);
+		expect(stored?.references ?? []).toEqual([]);
+		expect(stored?.modifiedFiles ?? []).toEqual([]);
+		expect(stored?.documentation ?? []).toEqual([]);
+	});
+
 	it("round-trips task dueDate through create, view, and update", async () => {
 		const invalidCreateType = await handlers.handleCreateTask(
 			jsonRequest("/api/tasks", "POST", { title: "Invalid task due type", dueDate: 123 }),
