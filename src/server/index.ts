@@ -38,6 +38,7 @@ import { formatValidStatuses, getCanonicalStatuses, getValidStatuses } from "../
 import { isValidTaskId } from "../utils/task-id.ts";
 import { isAmbiguousTaskIdError, LOCAL_TASK_LOOKUP_HINT } from "../utils/task-path.ts";
 import { getVersion } from "../utils/version.ts";
+import { checkRequest } from "./request-guard.ts";
 
 // Regex pattern to match any prefix (letters followed by dash)
 const PREFIX_PATTERN = /^[a-zA-Z]+-/i;
@@ -534,6 +535,8 @@ export class BacklogServer {
 					},
 				},
 				fetch: async (req: Request, server: Server<unknown>) => {
+					const rejection = this.guard(req);
+					if (rejection) return rejection;
 					const res = await this.handleRequest(req, server);
 
 					// Disable caching for GET/HEAD so browser always fetches latest content
@@ -566,6 +569,8 @@ export class BacklogServer {
 				this.runtimeWorkingDirectory = process.cwd();
 				process.chdir(bundleAssetDirectory);
 			}
+
+			serveOptions.routes = this.guardRoutes(serveOptions.routes);
 
 			try {
 				this.server = Bun.serve(serveOptions as unknown as Parameters<typeof Bun.serve>[0]) as Server<unknown>;
@@ -779,6 +784,34 @@ export class BacklogServer {
 			console.error("Error serving asset:", error);
 			return new Response("Internal Server Error", { status: 500 });
 		}
+	}
+
+	private guard(req: Request): Response | null {
+		const port = this.server?.port;
+		// Before Bun.serve returns there is no bound port; no request can arrive yet.
+		return port === undefined ? null : checkRequest(req, port);
+	}
+
+	// Wrap every per-method route handler so the request guard runs first.
+	// HTML bundle routes (the SPA) are not method maps and stay unwrapped.
+	private guardRoutes<T extends Record<string, unknown>>(routes: T): T {
+		const guarded: Record<string, unknown> = {};
+		for (const [path, route] of Object.entries(routes)) {
+			if (typeof route !== "object" || route === null || !Object.values(route).some((h) => typeof h === "function")) {
+				guarded[path] = route;
+				continue;
+			}
+			const methods: Record<string, unknown> = {};
+			for (const [method, handler] of Object.entries(route)) {
+				methods[method] =
+					typeof handler === "function"
+						? (req: Request, ...rest: unknown[]) =>
+								this.guard(req) ?? (handler as (...a: unknown[]) => unknown)(req, ...rest)
+						: handler;
+			}
+			guarded[path] = methods;
+		}
+		return guarded as T;
 	}
 
 	private async handleRequest(req: Request, server: Server<unknown>): Promise<Response> {
