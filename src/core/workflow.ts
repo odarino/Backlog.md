@@ -14,6 +14,14 @@ export class WorkflowError extends Error {
 	}
 }
 
+/** The task files and config are saved, but the auto-commit failed. Callers must treat the change as applied. */
+export class WorkflowCommitError extends Error {
+	constructor(cause: unknown) {
+		super(cause instanceof Error ? cause.message : String(cause), { cause });
+		this.name = "WorkflowCommitError";
+	}
+}
+
 export interface WorkflowResult {
 	config: BacklogConfig;
 	changedTasks: number;
@@ -302,7 +310,7 @@ async function applyStatusChange(
 			} catch {
 				// Keep the commit error; it is the one the caller can act on.
 			}
-			throw error;
+			throw new WorkflowCommitError(error);
 		}
 	}
 
