@@ -335,6 +335,7 @@ export interface BacklogConfig {
 	milestones?: string[];
 	definitionOfDone?: string[];
 	defaultStatus?: string;
+	statusColors?: Record<string, string>;
 	dateFormat: string;
 	maxColumnWidth?: number;
 	imageMaxDimension?: number;

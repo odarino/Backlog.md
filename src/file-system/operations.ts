@@ -186,6 +186,27 @@ function readYamlKey(document: string, key: string): { value: unknown } | { erro
 	}
 }
 
+/** Read `status_colors` as a map of string entries; anything that is not a plain map yields nothing. */
+function parseStatusColors(content: string): Record<string, string> | undefined {
+	const block = extractConfigKeyYaml(content, "status_colors");
+	if (block === undefined) {
+		return undefined;
+	}
+	const parsed = readYamlKey(block, "status_colors");
+	if (
+		!("value" in parsed) ||
+		typeof parsed.value !== "object" ||
+		parsed.value === null ||
+		Array.isArray(parsed.value)
+	) {
+		return undefined;
+	}
+	const entries = Object.entries(parsed.value).filter(
+		(entry): entry is [string, string] => typeof entry[1] === "string",
+	);
+	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 /**
  * Parse one list-valued config key as YAML, so quoting, escapes, block sequences, and trailing
  * comments are handled by the parser instead of by hand. The key's own block is what gets parsed, so a
@@ -2098,6 +2119,7 @@ ${description || `Milestone: ${title}`}`,
 		config.priorities = parseListValue("priorities");
 		config.projects = parseListValue("projects");
 		config.defaultAssignee = parseListValue("default_assignee");
+		config.statusColors = parseStatusColors(content);
 		const lines = content.split("\n");
 
 		for (const line of lines) {
@@ -2197,6 +2219,7 @@ ${description || `Milestone: ${title}`}`,
 			projects: config.projects,
 			definitionOfDone: config.definitionOfDone,
 			defaultStatus: config.defaultStatus,
+			statusColors: config.statusColors,
 			dateFormat: config.dateFormat || "yyyy-mm-dd",
 			maxColumnWidth: config.maxColumnWidth,
 			imageMaxDimension: config.imageMaxDimension,
@@ -2226,8 +2249,11 @@ ${description || `Milestone: ${title}`}`,
 				? [`default_assignee: [${config.defaultAssignee.map((assignee) => JSON.stringify(assignee)).join(", ")}]`]
 				: []),
 			...(config.defaultReporter ? [`default_reporter: "${config.defaultReporter}"`] : []),
-			...(config.defaultStatus ? [`default_status: "${config.defaultStatus}"`] : []),
-			`statuses: [${config.statuses.map((s) => `"${s}"`).join(", ")}]`,
+			...(config.defaultStatus ? [`default_status: ${JSON.stringify(config.defaultStatus)}`] : []),
+			...(config.statusColors && Object.keys(config.statusColors).length > 0
+				? [`status_colors: ${JSON.stringify(config.statusColors)}`]
+				: []),
+			`statuses: [${config.statuses.map((s) => JSON.stringify(s)).join(", ")}]`,
 			`labels: [${config.labels.map((l) => `"${l}"`).join(", ")}]`,
 			...(config.types && config.types.length > 0 ? [`types: [${config.types.map((t) => `"${t}"`).join(", ")}]`] : []),
 			...(config.priorities && config.priorities.length > 0
