@@ -117,8 +117,10 @@ describe("web server request guard", () => {
 		expect((await call(`/api/tasks/${id}`)).status).toBe(200);
 	});
 
-	it("still serves the SPA and assets for a good Host", async () => {
-		expect((await call("/")).status).toBe(200);
+	// The SPA shell is not requested here: on Linux, Bun cannot build the HTML
+	// route again in a later --isolate file of the same worker, and
+	// server-tasks-spa-fallback.test.ts already serves it through this guard.
+	it("still serves assets for a good Host", async () => {
 		expect((await call("/assets/missing.png")).status).toBe(404);
 	});
 });
