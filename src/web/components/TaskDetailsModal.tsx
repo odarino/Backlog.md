@@ -216,8 +216,10 @@ export const TaskDetailsModal: React.FC<Props> = ({
   const activeDemotionRequest = useRef<{ identity: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const lightboxOpenRef = useRef(false);
-  lightboxOpenRef.current = lightboxOpen;
+  const [editorOverlayOpen, setEditorOverlayOpen] = useState(false);
+  const overlayOpen = lightboxOpen || editorOverlayOpen;
+  const overlayOpenRef = useRef(false);
+  overlayOpenRef.current = overlayOpen;
   const [demoting, setDemoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -496,7 +498,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
   // Intercept Escape to cancel edit (not close modal) when in edit mode
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (lightboxOpenRef.current) return;
+      if (overlayOpenRef.current) return;
       if (mode === "edit" && (e.key === "Escape")) {
         e.preventDefault();
         e.stopPropagation();
@@ -1140,7 +1142,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
       title={isCreateMode ? (isDraftMode ? "Create New Draft" : "Create New Task") : `${displayId} — ${task.title}`}
       maxWidthClass="max-w-5xl"
       disableEscapeClose={mode === "edit" || mode === "create" || demoting}
-      suspendKeyHandling={lightboxOpen}
+      suspendKeyHandling={overlayOpen}
       actions={
 		<div className="flex flex-nowrap items-center justify-end gap-2">
 		          {isFinalStatus && mode === "preview" && !isCreateMode && !isFromOtherBranch && (
@@ -1297,6 +1299,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-md">
                 <TaskMarkdownEditor
+                  onOverlayChange={setEditorOverlayOpen}
                   value={description}
                   onChange={setDescription}
                   taskId={task?.id}
@@ -1618,6 +1621,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-md">
                 <TaskMarkdownEditor
+                  onOverlayChange={setEditorOverlayOpen}
                   value={plan}
                   onChange={setPlan}
                   taskId={task?.id}
@@ -1642,6 +1646,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-md">
                 <TaskMarkdownEditor
+                  onOverlayChange={setEditorOverlayOpen}
                   value={notes}
                   onChange={setNotes}
                   taskId={task?.id}
@@ -1716,6 +1721,7 @@ export const TaskDetailsModal: React.FC<Props> = ({
               ) : (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-md">
                   <TaskMarkdownEditor
+                    onOverlayChange={setEditorOverlayOpen}
                     value={finalSummary}
                     onChange={setFinalSummary}
                     taskId={task?.id}
