@@ -219,6 +219,35 @@ describe("workflow status changes", () => {
 		expect(await Bun.file(core.fs.configFilePath).text()).toBe(configBefore);
 	});
 
+	it("renameStatus from a non-canonical spelling to the configured spelling changes nothing", async () => {
+		const configBefore = await Bun.file(core.fs.configFilePath).text();
+		const result = await renameStatus(core, "review", "Review");
+		expect(result.changedTasks).toBe(0);
+		expect(await Bun.file(core.fs.configFilePath).text()).toBe(configBefore);
+		expect(await readStatus(fixtures.review[1] as string)).toBe("review");
+	});
+
+	it("renameStatus to a new spelling of the same status rewrites the tasks", async () => {
+		const result = await renameStatus(core, "Review", "review");
+		// The file already spelled "review" needs no write.
+		expect(result.changedTasks).toBe(3);
+		expect(result.config.statuses).toEqual(["To Do", "In Progress", "review", "Done"]);
+		expect(await readStatus(fixtures.review[0] as string)).toBe("review");
+	});
+
+	it("refreshes an existing content store with the rewritten active tasks", async () => {
+		const store = await core.getContentStore();
+		try {
+			await renameStatus(core, "Review", "QA");
+			const statuses = store.getTasks().map((task) => task.status);
+			expect(statuses).not.toContain("Review");
+			expect(statuses).not.toContain("review");
+			expect(statuses.filter((status) => status === "QA")).toHaveLength(2);
+		} finally {
+			core.disposeContentStore();
+		}
+	});
+
 	it("renameStatus does not run onStatusChange", async () => {
 		const marker = join(TEST_DIR, "called");
 		const config = await core.fs.loadConfig();
@@ -296,6 +325,137 @@ describe("workflow status changes", () => {
 		expect(await Bun.file(core.fs.configFilePath).text()).toBe(configBefore);
 		expect((await core.fs.loadConfig())?.statuses).toEqual(["To Do", "In Progress", "Review", "Done"]);
 	});
+
+	it("rolls back earlier task files when a task write fails partway", async () => {
+		const textsBefore = await Promise.all(fixtures.review.map((path) => Bun.file(path).text()));
+		const configBefore = await Bun.file(core.fs.configFilePath).text();
+		const originalSaveTask = core.fs.saveTask;
+		let calls = 0;
+		core.fs.saveTask = async (task) => {
+			calls += 1;
+			if (calls === 3) throw new Error("write failed");
+			return await originalSaveTask.call(core.fs, task);
+		};
+		try {
+			await expect(renameStatus(core, "Review", "QA")).rejects.toThrow("write failed");
+		} finally {
+			core.fs.saveTask = originalSaveTask;
+		}
+
+		expect(calls).toBe(3);
+		const textsAfter = await Promise.all(fixtures.review.map((path) => Bun.file(path).text()));
+		expect(textsAfter).toEqual(textsBefore);
+		expect(await Bun.file(core.fs.configFilePath).text()).toBe(configBefore);
+	});
+
+	it("names the files it could not restore in the rethrown error", async () => {
+		const originalSaveTask = core.fs.saveTask;
+		const originalLock = core.fs.withTaskLock;
+		let calls = 0;
+		let failed = false;
+		core.fs.saveTask = async (task) => {
+			calls += 1;
+			if (calls === 2) {
+				failed = true;
+				throw new Error("write failed");
+			}
+			return await originalSaveTask.call(core.fs, task);
+		};
+		core.fs.withTaskLock = (async (task, fn) => {
+			if (failed) throw new Error("lock busy");
+			return await originalLock.call(core.fs, task, fn);
+		}) as typeof originalLock;
+		let message = "";
+		try {
+			await renameStatus(core, "Review", "QA");
+		} catch (error) {
+			message = (error as Error).message;
+		} finally {
+			core.fs.saveTask = originalSaveTask;
+			core.fs.withTaskLock = originalLock;
+		}
+
+		const rewrittenPath = (
+			await Promise.all(fixtures.review.map(async (path) => ((await readStatus(path)) === "QA" ? path : null)))
+		).find((path) => path !== null);
+		expect(rewrittenPath).toBeDefined();
+		expect(message).toBe(`write failed; could not restore: ${rewrittenPath}`);
+	});
+
+	it("serializes concurrent renames so every task status stays in the config", async () => {
+		const results = await Promise.allSettled([
+			renameStatus(core, "Review", "QA"),
+			renameStatus(core, "Review", "Check"),
+		]);
+
+		const fulfilled = results.filter((result) => result.status === "fulfilled");
+		const rejected = results.filter((result) => result.status === "rejected");
+		expect(fulfilled).toHaveLength(1);
+		expect(rejected).toHaveLength(1);
+		expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(WorkflowError);
+
+		const statuses = (await new Core(TEST_DIR).fs.loadConfig())?.statuses ?? [];
+		for (const path of [...fixtures.review, fixtures.todo, fixtures.inProgress, fixtures.completedDone]) {
+			expect(statuses).toContain(await readStatus(path));
+		}
+	});
+
+	it("rolls back and returns 409 when the config changes on disk during the change", async () => {
+		const textsBefore = await Promise.all(fixtures.review.map((path) => Bun.file(path).text()));
+		const configPath = core.fs.configFilePath;
+		const originalSaveTask = core.fs.saveTask;
+		let edited = "";
+		core.fs.saveTask = async (task) => {
+			if (!edited) {
+				// Another process (for example the CLI) adds a status while the task files are rewritten.
+				edited = (await Bun.file(configPath).text()).replace(
+					/^statuses:.*$/m,
+					'statuses: ["To Do", "In Progress", "Review", "Blocked", "Done"]',
+				);
+				await Bun.write(configPath, edited);
+			}
+			return await originalSaveTask.call(core.fs, task);
+		};
+		try {
+			await expectRejects(
+				renameStatus(core, "Review", "QA"),
+				409,
+				"The workflow changed while saving. Reload and try again.",
+			);
+		} finally {
+			core.fs.saveTask = originalSaveTask;
+		}
+
+		const textsAfter = await Promise.all(fixtures.review.map((path) => Bun.file(path).text()));
+		expect(textsAfter).toEqual(textsBefore);
+		expect(await Bun.file(configPath).text()).toBe(edited);
+	});
+
+	it("removeStatus returns 409 when a task starts using the status during the change", async () => {
+		const config = await core.fs.loadConfig();
+		if (!config) throw new Error("config missing");
+		await core.fs.saveConfig({ ...config, statuses: ["Unused", ...(config.statuses ?? [])] });
+		const configBefore = await Bun.file(core.fs.configFilePath).text();
+		const originalListTasks = core.fs.listTasks;
+		let calls = 0;
+		core.fs.listTasks = async (filter) => {
+			const tasks = await originalListTasks.call(core.fs, filter);
+			calls += 1;
+			// Right after the usage check, another writer moves a task into the status being removed.
+			if (calls === 1) await setStatusLine(fixtures.todo, "Unused");
+			return tasks;
+		};
+		try {
+			await expectRejects(
+				removeStatus(core, "Unused", undefined),
+				409,
+				"Tasks started using Unused while saving. Reload and try again.",
+			);
+		} finally {
+			core.fs.listTasks = originalListTasks;
+		}
+		expect(await Bun.file(core.fs.configFilePath).text()).toBe(configBefore);
+	});
 });
 
 describe("workflow auto-commit", () => {
@@ -332,5 +492,33 @@ describe("workflow auto-commit", () => {
 			expect(committed.some((path) => dirname(path) === folder)).toBe(true);
 		}
 		expect(committed).toHaveLength(fixtures.review.length + 1);
+	});
+
+	it("names the number of moved files in the remove commit", async () => {
+		await seedTasks();
+		await $`git add -A`.cwd(TEST_DIR).quiet();
+		await $`git commit -m baseline`.cwd(TEST_DIR).quiet();
+
+		await removeStatus(core, "Review", "In Progress");
+
+		const message = (await $`git log -1 --pretty=%s`.cwd(TEST_DIR).text()).trim();
+		expect(message).toBe('Remove status "Review" (moved 4 tasks to "In Progress")');
+	});
+
+	it("unstages its paths when the commit fails", async () => {
+		await seedTasks();
+		await $`git add -A`.cwd(TEST_DIR).quiet();
+		await $`git commit -m baseline`.cwd(TEST_DIR).quiet();
+		const originalCommit = core.git.commitFiles;
+		core.git.commitFiles = async () => {
+			throw new Error("commit failed");
+		};
+		try {
+			await expect(renameStatus(core, "Review", "QA")).rejects.toThrow("commit failed");
+		} finally {
+			core.git.commitFiles = originalCommit;
+		}
+
+		expect((await $`git diff --cached --name-only`.cwd(TEST_DIR).text()).trim()).toBe("");
 	});
 });

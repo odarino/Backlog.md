@@ -84,34 +84,38 @@ export async function renameStatus(
 	to: string,
 	autoCommit?: boolean,
 ): Promise<WorkflowResult> {
-	const { config } = await loadWorkflow(core);
-	const source = findStatus(config.statuses, from);
-	if (!source) throw new WorkflowError(`Unknown status: ${from}`, 404);
-	const target = validateStatusName(to);
-	const clash = findStatus(config.statuses, target);
-	if (clash && clash !== source) throw new WorkflowError(`Status already exists: ${clash}`, 409);
-	if (target === source) return { config, changedTasks: 0 };
+	return await serialized(async () => {
+		const { config } = await loadWorkflow(core);
+		const source = findStatus(config.statuses, from);
+		if (!source) throw new WorkflowError(`Unknown status: ${from}`, 404);
+		const target = validateStatusName(to);
+		const clash = findStatus(config.statuses, target);
+		if (clash && clash !== source) throw new WorkflowError(`Status already exists: ${clash}`, 409);
+		// The configured spelling is the identity: renaming to it (from any spelling) is a no-op.
+		if (target === source) return { config, changedTasks: 0 };
 
-	const sourceKey = statusKey(source);
-	const renamed = (name: string) => (statusKey(name) === sourceKey ? target : name);
-	const nextConfig: BacklogConfig = {
-		...config,
-		statuses: config.statuses.map(renamed),
-		...(config.defaultStatus ? { defaultStatus: renamed(config.defaultStatus) } : {}),
-		...(config.statusColors
-			? {
-					statusColors: Object.fromEntries(
-						Object.entries(config.statusColors).map(([name, color]) => [renamed(name), color]),
-					),
-				}
-			: {}),
-	};
-	return await applyStatusChange(core, {
-		sourceKey,
-		target,
-		nextConfig,
-		message: `Rename status "${source}" to "${target}"`,
-		autoCommit,
+		const sourceKey = statusKey(source);
+		const renamed = (name: string) => (statusKey(name) === sourceKey ? target : name);
+		const nextConfig: BacklogConfig = {
+			...config,
+			statuses: config.statuses.map(renamed),
+			...(config.defaultStatus ? { defaultStatus: renamed(config.defaultStatus) } : {}),
+			...(config.statusColors
+				? {
+						statusColors: Object.fromEntries(
+							Object.entries(config.statusColors).map(([name, color]) => [renamed(name), color]),
+						),
+					}
+				: {}),
+		};
+		return await applyStatusChange(core, {
+			source,
+			target,
+			baseStatuses: config.statuses,
+			nextConfig,
+			message: () => `Rename status "${source}" to "${target}"`,
+			autoCommit,
+		});
 	});
 }
 
@@ -121,40 +125,45 @@ export async function removeStatus(
 	moveTo: string | undefined,
 	autoCommit?: boolean,
 ): Promise<WorkflowResult> {
-	const { config } = await loadWorkflow(core);
-	const removed = findStatus(config.statuses, status);
-	if (!removed) throw new WorkflowError(`Unknown status: ${status}`, 404);
-	if (config.statuses.length <= 2) throw new WorkflowError("A workflow needs at least 2 statuses", 400);
+	return await serialized(async () => {
+		const { config } = await loadWorkflow(core);
+		const removed = findStatus(config.statuses, status);
+		if (!removed) throw new WorkflowError(`Unknown status: ${status}`, 404);
+		if (config.statuses.length <= 2) throw new WorkflowError("A workflow needs at least 2 statuses", 400);
 
-	const sourceKey = statusKey(removed);
-	const remaining = config.statuses.filter((name) => statusKey(name) !== sourceKey);
-	const used = (await listWorkflowTasks(core)).filter(({ task }) => statusKey(task.status ?? "") === sourceKey).length;
-	let target: string | undefined;
-	if (used > 0) {
-		if (!moveTo?.trim()) throw new WorkflowError(`Choose a status for the ${used} tasks that use ${removed}`, 400);
-		target = findStatus(remaining, moveTo);
-		if (!target) throw new WorkflowError(`Unknown target status: ${moveTo}`, 400);
-	}
+		const sourceKey = statusKey(removed);
+		const remaining = config.statuses.filter((name) => statusKey(name) !== sourceKey);
+		const used = (await listWorkflowTasks(core)).filter(
+			({ task }) => statusKey(task.status ?? "") === sourceKey,
+		).length;
+		let target: string | undefined;
+		if (used > 0) {
+			if (!moveTo?.trim()) throw new WorkflowError(`Choose a status for the ${used} tasks that use ${removed}`, 400);
+			target = findStatus(remaining, moveTo);
+			if (!target) throw new WorkflowError(`Unknown target status: ${moveTo}`, 400);
+		}
 
-	const nextConfig: BacklogConfig = {
-		...config,
-		statuses: remaining,
-		...(config.defaultStatus && statusKey(config.defaultStatus) === sourceKey ? { defaultStatus: remaining[0] } : {}),
-		...(config.statusColors
-			? {
-					statusColors: Object.fromEntries(
-						Object.entries(config.statusColors).filter(([name]) => statusKey(name) !== sourceKey),
-					),
-				}
-			: {}),
-	};
-	const moved = target ? ` (moved ${used} tasks to "${target}")` : "";
-	return await applyStatusChange(core, {
-		sourceKey,
-		target,
-		nextConfig,
-		message: `Remove status "${removed}"${moved}`,
-		autoCommit,
+		const nextConfig: BacklogConfig = {
+			...config,
+			statuses: remaining,
+			...(config.defaultStatus && statusKey(config.defaultStatus) === sourceKey ? { defaultStatus: remaining[0] } : {}),
+			...(config.statusColors
+				? {
+						statusColors: Object.fromEntries(
+							Object.entries(config.statusColors).filter(([name]) => statusKey(name) !== sourceKey),
+						),
+					}
+				: {}),
+		};
+		return await applyStatusChange(core, {
+			source: removed,
+			target,
+			baseStatuses: config.statuses,
+			nextConfig,
+			message: (moved) =>
+				`Remove status "${removed}"${target && moved > 0 ? ` (moved ${moved} tasks to "${target}")` : ""}`,
+			autoCommit,
+		});
 	});
 }
 
@@ -168,6 +177,15 @@ interface FolderTask {
 interface RewrittenTask extends FolderTask {
 	/** The file text before the rewrite, written back as-is on rollback. */
 	original: string;
+}
+
+let workflowQueue: Promise<unknown> = Promise.resolve();
+
+/** Run status changes in this process one at a time, so each one starts from the config the last one saved. */
+function serialized<T>(operation: () => Promise<T>): Promise<T> {
+	const run = workflowQueue.then(operation);
+	workflowQueue = run.catch(() => undefined);
+	return run;
 }
 
 function findStatus(statuses: string[], name: string): string | undefined {
@@ -195,43 +213,79 @@ async function listWorkflowTasks(core: Core): Promise<FolderTask[]> {
 	];
 }
 
+function sameStatuses(left: string[], right: string[]): boolean {
+	return left.length === right.length && left.every((status, index) => status === right[index]);
+}
+
 /**
- * Rewrite the status of every task matching `sourceKey` (when there is a target), then save the
- * config, refresh any content store, and commit. A failure before the config is saved puts every
- * rewritten file back and leaves the config as it was.
+ * Rewrite the status of every task in `source` (when there is a target), then save the config,
+ * refresh any content store, and commit. Before the config is saved, the change is checked against
+ * the files again: no task may still use `source`, and the statuses on disk must be the ones the
+ * change started from. Any failure up to the config save puts every rewritten file back and leaves
+ * the config as it was.
  */
 async function applyStatusChange(
 	core: Core,
 	change: {
-		sourceKey: string;
+		source: string;
 		target: string | undefined;
+		baseStatuses: string[];
 		nextConfig: BacklogConfig;
-		message: string;
+		message: (changedTasks: number) => string;
 		autoCommit: boolean | undefined;
 	},
 ): Promise<WorkflowResult> {
-	const { sourceKey, target } = change;
+	const { source, target } = change;
+	const sourceKey = statusKey(source);
+	// A task already in the target spelling is done, which matters for a case-only rename.
+	const usesSource = (status = "") => statusKey(status) === sourceKey && status !== target;
 	const rewritten: RewrittenTask[] = [];
 	try {
 		if (target) {
-			for (const candidate of await listWorkflowTasks(core)) {
-				if (statusKey(candidate.task.status ?? "") !== sourceKey) continue;
-				const result = await rewriteTaskStatus(core, candidate, sourceKey, target);
+			for (const candidate of (await listWorkflowTasks(core)).filter(({ task }) => usesSource(task.status))) {
+				const result = await rewriteTaskStatus(core, candidate, usesSource, target);
 				if (result) rewritten.push(result);
 			}
 		}
+		if ((await listWorkflowTasks(core)).some(({ task }) => usesSource(task.status))) {
+			throw new WorkflowError(`Tasks started using ${source} while saving. Reload and try again.`, 409);
+		}
+		core.fs.invalidateConfigCache();
+		const latest = await loadWorkflow(core);
+		if (!sameStatuses(latest.config.statuses, change.baseStatuses)) {
+			throw new WorkflowError("The workflow changed while saving. Reload and try again.", 409);
+		}
 		await core.fs.saveConfig(change.nextConfig);
 	} catch (error) {
-		await restoreTasks(core, rewritten);
+		const unrestored = await restoreTasks(core, rewritten);
+		if (unrestored.length > 0 && error instanceof Error) {
+			error.message = `${error.message}; could not restore: ${unrestored.join(", ")}`;
+		}
 		throw error;
 	}
 
-	if (rewritten.length > 0) await refreshContentStore(core, rewritten);
+	if (rewritten.length > 0) {
+		try {
+			await core.refreshTasksInContentStore(rewritten.map(({ task }) => task));
+		} catch (error) {
+			// The files and config are saved; a stale in-process view must not block the commit.
+			console.error("Could not refresh the task view after the status change:", error);
+		}
+	}
 
 	if (await core.shouldAutoCommit(change.autoCommit)) {
 		const paths = [...rewritten.map(({ task }) => task.filePath as string), core.fs.configFilePath];
-		await core.git.addFiles(paths);
-		await core.git.commitFiles(change.message, paths);
+		try {
+			await core.git.addFiles(paths);
+			await core.git.commitFiles(change.message(rewritten.length), paths);
+		} catch (error) {
+			try {
+				await core.git.resetPaths(paths);
+			} catch {
+				// Keep the commit error; it is the one the caller can act on.
+			}
+			throw error;
+		}
 	}
 
 	return { config: (await core.fs.loadConfig()) ?? change.nextConfig, changedTasks: rewritten.length };
@@ -244,14 +298,14 @@ async function applyStatusChange(
 async function rewriteTaskStatus(
 	core: Core,
 	{ task, folder }: FolderTask,
-	sourceKey: string,
+	usesSource: (status?: string) => boolean,
 	target: string,
 ): Promise<RewrittenTask | undefined> {
 	const filePath = task.filePath as string;
 	return await core.fs.withTaskLock({ id: task.id, filePath }, async () => {
 		const original = await Bun.file(filePath).text();
 		const parsed = parseTask(original);
-		if (statusKey(parsed.status ?? "") !== sourceKey) return undefined;
+		if (!usesSource(parsed.status)) return undefined;
 		const current = folder === "active" ? normalizeTaskIdentity(parsed) : parsed;
 		const updated: Task = { ...current, status: target, filePath };
 		await core.fs.saveTask(updated);
@@ -259,8 +313,9 @@ async function rewriteTaskStatus(
 	});
 }
 
-/** Best effort: write each rewritten file's original text back under its lock. */
-async function restoreTasks(core: Core, rewritten: RewrittenTask[]): Promise<void> {
+/** Best effort: write each rewritten file's original text back under its lock. Returns the paths that failed. */
+async function restoreTasks(core: Core, rewritten: RewrittenTask[]): Promise<string[]> {
+	const unrestored: string[] = [];
 	for (const { task, original } of rewritten) {
 		const filePath = task.filePath as string;
 		try {
@@ -268,18 +323,8 @@ async function restoreTasks(core: Core, rewritten: RewrittenTask[]): Promise<voi
 				await Bun.write(filePath, original);
 			});
 		} catch {
-			// Keep restoring the rest; the caller rethrows the original failure.
+			unrestored.push(filePath);
 		}
 	}
-}
-
-/** Publish the rewritten records the way the bulk writers do. Archived tasks are not in the store. */
-async function refreshContentStore(core: Core, rewritten: RewrittenTask[]): Promise<void> {
-	const store = await core.getContentStore();
-	await store.batchTaskUpdates(async () => {
-		for (const { task, folder } of rewritten) {
-			if (folder === "active") store.upsertTask(task);
-			else if (folder === "completed") store.refreshCompletedTask(task);
-		}
-	});
+	return unrestored;
 }
