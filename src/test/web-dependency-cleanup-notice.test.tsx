@@ -55,6 +55,9 @@ let searchHold: Promise<void> | null = null;
 let reportArchiveMoved = false;
 let failRefreshSearch = false;
 let archiveRecoveryEvents: string[] = [];
+/** Set at teardown: the fetch stub then never answers, so a late refresh cannot touch the next test. */
+let disposed = false;
+let inFlightRequests = 0;
 
 let activeRoot: Root | null = null;
 let activeDom: JSDOM | null = null;
@@ -103,7 +106,9 @@ const respond = async (url: URL, init?: RequestInit): Promise<Response> => {
 	if (url.pathname === "/api/search") {
 		if (failRefreshSearch) {
 			archiveRecoveryEvents.push("refresh");
-			throw new Error("Search network failure");
+			// A client error fails at once. A network error would make the API client retry with
+			// 1s, 2s and 4s back-offs, which keeps the refresh alive long after this test ends.
+			return json({ error: "Search failure" }, 400);
 		}
 		if (searchHold) await searchHold;
 		return json(tasks.map((task) => ({ type: "task", task, score: 1 })) satisfies SearchResult[]);
@@ -162,9 +167,18 @@ const setupDom = (path: string) => {
 	window.scrollTo = () => {};
 	window.confirm = () => true;
 
+	disposed = false;
+	inFlightRequests = 0;
 	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-		const value = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-		return await respond(new URL(value, window.location.origin), init);
+		// A request that outlives the test must not reach a torn-down window or the real fetch.
+		if (disposed) return await new Promise<Response>(() => {});
+		inFlightRequests++;
+		try {
+			const value = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+			return await respond(new URL(value, window.location.origin), init);
+		} finally {
+			inFlightRequests--;
+		}
 	}) as typeof fetch;
 };
 
@@ -272,6 +286,7 @@ afterEach(() => {
 		activeRoot = null;
 	}
 	FakeWebSocket.instances = [];
+	disposed = true;
 	globalThis.fetch = originalFetch;
 	globalThis.WebSocket = originalWebSocket;
 	globalThis.ResizeObserver = originalResizeObserver;
@@ -280,6 +295,7 @@ afterEach(() => {
 	globalThis.Element = originalElement;
 	globalThis.HTMLElement = originalHTMLElement;
 	globalThis.Node = originalNode;
+	activeDom?.window.close();
 	activeDom = null;
 	tasks = [];
 	cleanedTaskIds = {};
@@ -361,6 +377,14 @@ describe("dependency cleanup notice", () => {
 		try {
 			await archiveFromModal(container, "Archive target");
 			await waitFor(() => archiveRecoveryEvents.includes("alert"), "archive recovery warning");
+			// The failed refresh retries with a full reload and then announces the update. Wait for
+			// that retry's search (the second one) and for every request to finish, so nothing is
+			// still running when the test tears down.
+			await waitFor(
+				() => archiveRecoveryEvents.filter((event) => event === "refresh").length >= 2 && inFlightRequests === 0,
+				"failed refresh and its retry to settle " + JSON.stringify([archiveRecoveryEvents, inFlightRequests]),
+			);
+			await settle();
 		} finally {
 			console.error = originalConsoleError;
 		}
