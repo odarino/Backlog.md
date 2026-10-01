@@ -52,6 +52,7 @@ export function validateStatusList(statuses: string[]): string[] {
 	return names;
 }
 
+/** Map color keys to the configured statuses. Keys for unknown statuses are dropped, so a stale entry never blocks a save. */
 export function validateStatusColors(
 	colors: Record<string, string> | undefined,
 	statuses: string[],
@@ -59,7 +60,7 @@ export function validateStatusColors(
 	const result: Record<string, string> = {};
 	for (const [name, color] of Object.entries(colors ?? {})) {
 		const status = findStatus(statuses, name);
-		if (!status) throw new WorkflowError(`Unknown status in colors: ${name}`, 400);
+		if (!status) continue;
 		if (status in result) throw new WorkflowError(`Duplicate color for ${status}`, 400);
 		if (typeof color !== "string" || !COLOR_PATTERN.test(color)) {
 			throw new WorkflowError(`Invalid color for ${status}: ${color}`, 400);

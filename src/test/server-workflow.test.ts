@@ -183,9 +183,28 @@ describe("PUT /api/config status rules", () => {
 		expect(response.status).toBe(200);
 		const config = (await (await request("/api/config")).json()) as { statusColors?: Record<string, string> };
 		expect(config.statusColors).toEqual({ "To Do": "#aabbcc" });
-		const before = await getConfig();
-		expect((await putConfig({ statusColors: { Nope: "#000000" } })).status).toBe(400);
-		expect(await getConfig()).toEqual(before);
+	});
+
+	it("drops colors for unknown statuses, including stale stored ones", async () => {
+		const response = await putConfig({ statusColors: { Nope: "#000000", Done: "#10B981" } });
+		expect(response.status).toBe(200);
+		expect((await getConfig()).statusColors).toEqual({ Done: "#10b981" });
+		// A color left behind in the file for a status that no longer exists.
+		const path = core.filesystem.configFilePath;
+		const text = (await Bun.file(path).text()).replace(
+			/^status_colors:.*$/m,
+			'status_colors: {"Gone":"#123456","Done":"#10b981"}',
+		);
+		await Bun.write(path, text);
+		// The PUT reads the file again under the workflow lock and carries the stored colors over.
+		const { statusColors: _colors, ...rest } = await getConfig();
+		const saved = await request("/api/config", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...rest, projectName: "Again" }),
+		});
+		expect(saved.status).toBe(200);
+		expect((await getConfig()).statusColors).toEqual({ Done: "#10b981" });
 	});
 
 	it("rejects malformed or duplicate status colors", async () => {
