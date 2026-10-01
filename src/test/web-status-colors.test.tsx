@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import Board from "../web/components/Board";
 import TaskColumn from "../web/components/TaskColumn";
 import { readableTextColor, statusChipStyle, statusColorFor } from "../web/lib/status-colors";
 
@@ -49,6 +50,15 @@ describe("readableTextColor", () => {
 		expect(readableTextColor("#000000")).toBe("#ffffff");
 		expect(readableTextColor("#f59e0b")).toBe("#111827");
 		expect(readableTextColor("#1e3a8a")).toBe("#ffffff");
+		for (const hex of ["#16a34a", "#3b82f6", "#ef4444", "#ec4899"]) {
+			expect(readableTextColor(hex)).toBe("#111827");
+		}
+	});
+
+	it("returns white for a malformed hex value", () => {
+		expect(readableTextColor("red")).toBe("#ffffff");
+		expect(readableTextColor("#fff")).toBe("#ffffff");
+		expect(readableTextColor("")).toBe("#ffffff");
 	});
 });
 
@@ -81,5 +91,34 @@ describe("TaskColumn status color", () => {
 	it("renders no color dot without colors", async () => {
 		const container = await renderColumn();
 		expect(container.querySelector("[data-status-color]")).toBeNull();
+	});
+});
+
+describe("Board status colors", () => {
+	it("passes statusColors to its columns", async () => {
+		setupDom();
+		const container = document.getElementById("root") as HTMLElement;
+		activeRoot = createRoot(container);
+		await act(async () => {
+			activeRoot?.render(
+				<Board
+					onEditTask={() => {}}
+					onNewTask={() => {}}
+					tasks={[]}
+					statuses={["To Do", "Review"]}
+					isLoading={false}
+					milestones={[]}
+					availableLabels={[]}
+					milestoneEntities={[]}
+					archivedMilestones={[]}
+					laneMode="none"
+					onLaneChange={() => {}}
+					statusColors={{ Review: "#8b5cf6" }}
+				/>,
+			);
+		});
+		const dots = container.querySelectorAll("[data-status-color]");
+		expect(dots.length).toBe(1);
+		expect((dots[0] as HTMLElement).style.backgroundColor).toBe("rgb(139, 92, 246)");
 	});
 });
