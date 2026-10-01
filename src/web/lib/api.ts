@@ -468,7 +468,39 @@ export class ApiClient {
 			body: JSON.stringify(config),
 		});
 		if (!response.ok) {
-			throw new Error("Failed to update config");
+			throw await toApiError(response, "Failed to update config");
+		}
+		return response.json();
+	}
+
+	async fetchStatusUsage(): Promise<Record<string, number>> {
+		const response = await fetch(`${API_BASE}/statuses/usage`);
+		if (!response.ok) {
+			throw await toApiError(response, "Failed to fetch status usage");
+		}
+		return response.json();
+	}
+
+	async renameStatus(from: string, to: string): Promise<{ config: BacklogConfig; changedTasks: number }> {
+		return this.postStatusChange("rename", { from, to }, "Failed to rename status");
+	}
+
+	async removeStatus(status: string, moveTo?: string): Promise<{ config: BacklogConfig; changedTasks: number }> {
+		return this.postStatusChange("remove", { status, moveTo }, "Failed to remove status");
+	}
+
+	private async postStatusChange(
+		action: "rename" | "remove",
+		body: Record<string, string | undefined>,
+		fallback: string,
+	): Promise<{ config: BacklogConfig; changedTasks: number }> {
+		const response = await fetch(`${API_BASE}/statuses/${action}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		if (!response.ok) {
+			throw await toApiError(response, fallback);
 		}
 		return response.json();
 	}

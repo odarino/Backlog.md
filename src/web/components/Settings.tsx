@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../lib/api';
 import { SuccessToast } from './SuccessToast';
+import WorkflowEditor from './WorkflowEditor';
 import type { BacklogConfig } from '../../types';
 
 const Settings: React.FC = () => {
@@ -38,6 +39,22 @@ const Settings: React.FC = () => {
 			setStatuses(data);
 		} catch (err) {
 			console.error('Failed to load statuses:', err);
+		}
+	};
+
+	// Refresh the workflow fields from the server and keep the user's other unsaved edits.
+	const reloadWorkflow = async () => {
+		try {
+			const fresh = await apiClient.fetchConfig();
+			setOriginalConfig(fresh);
+			setConfig((current) =>
+				current
+					? { ...current, statuses: fresh.statuses, statusColors: fresh.statusColors, defaultStatus: fresh.defaultStatus }
+					: fresh,
+			);
+			await loadStatuses();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to load configuration');
 		}
 	};
 
@@ -193,6 +210,8 @@ const Settings: React.FC = () => {
 					<div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
 						<h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Workflow Settings</h2>
 						<div className="space-y-4">
+							<WorkflowEditor key={config.statuses.join('|')} config={originalConfig ?? config} onSaved={reloadWorkflow} />
+
 							<div>
 								<label className="flex items-center justify-between">
 									<div>
