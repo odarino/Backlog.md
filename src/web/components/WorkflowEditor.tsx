@@ -12,11 +12,10 @@ import {
 	type WorkflowRow,
 } from "../lib/workflow-plan";
 import Modal from "./Modal";
-import { SuccessToast } from "./SuccessToast";
 
 interface WorkflowEditorProps {
 	config: BacklogConfig;
-	onSaved: () => void;
+	onSaved: (result: { error?: string }) => void;
 }
 
 const DEFAULT_COLOR = "#94a3b8";
@@ -35,7 +34,10 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 	const [moveTo, setMoveTo] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [saved, setSaved] = useState(false);
+	const [usageLoaded, setUsageLoaded] = useState(false);
+	const [usageError, setUsageError] = useState<string | null>(null);
+	const addInputRef = useRef<HTMLInputElement | null>(null);
+	const focusAddAfterClose = useRef(false);
 	const nextId = useRef(1);
 	const dragIndex = useRef<number | null>(null);
 
@@ -44,15 +46,24 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 		apiClient
 			.fetchStatusUsage()
 			.then((data) => {
-				if (!cancelled) setUsage(data);
+				if (cancelled) return;
+				setUsage(data);
+				setUsageLoaded(true);
 			})
 			.catch((err) => {
-				if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load status usage");
+				if (!cancelled) setUsageError(err instanceof Error ? err.message : "Failed to load status usage");
 			});
 		return () => {
 			cancelled = true;
 		};
 	}, []);
+
+	useEffect(() => {
+		if (pendingDelete === null && focusAddAfterClose.current) {
+			focusAddAfterClose.current = false;
+			addInputRef.current?.focus();
+		}
+	}, [pendingDelete]);
 
 	const edit = (next: WorkflowRow[]) => {
 		setRows(next);
@@ -99,6 +110,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 			(status) => status !== row?.original && !removals.some((removal) => removal.status === status),
 		);
 
+	// Shows the current row name, plus the saved name when the row was renamed. The value stays the saved name.
+	const targetLabel = (status: string) => {
+		const current = rows.find((row) => row.original === status)?.name ?? status;
+		return current === status ? status : `${current} (${status})`;
+	};
+
 	const handleDelete = (row: WorkflowRow) => {
 		const count = row.original === null ? 0 : effectiveUsage(row.original);
 		if (count === 0) {
@@ -112,12 +129,13 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 	const confirmDelete = () => {
 		if (!pendingDelete || !moveTo) return;
 		removeRow(pendingDelete, moveTo);
+		focusAddAfterClose.current = true;
 		setPendingDelete(null);
 	};
 
 	const validation = validateRows(rows);
 	const changed = hasWorkflowChanges(config.statuses, config.statusColors, rows, removals);
-	const message = error ?? validation;
+	const message = error ?? usageError ?? validation;
 
 	const handleSave = async () => {
 		const plan = buildWorkflowPlan(config.statuses, rows, removals);
@@ -127,21 +145,29 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 		}
 		setSaving(true);
 		setError(null);
+		let applied = 0;
 		try {
+			if (plan.preAdd) {
+				const current = await apiClient.fetchConfig();
+				await apiClient.updateConfig({ ...current, statuses: [...config.statuses, ...plan.preAdd] });
+				applied += 1;
+			}
 			for (const removal of plan.removals) {
 				await apiClient.removeStatus(removal.status, removal.moveTo ?? undefined);
+				applied += 1;
 			}
 			for (const rename of plan.renames) {
 				await apiClient.renameStatus(rename.from, rename.to);
+				applied += 1;
 			}
 			const fresh = await apiClient.fetchConfig();
 			await apiClient.updateConfig({ ...fresh, statuses: plan.statuses, statusColors: plan.statusColors });
-			setSaved(true);
-			window.setTimeout(() => setSaved(false), 3000);
-			onSaved();
+			onSaved({});
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to save workflow");
-			onSaved();
+			const text = err instanceof Error ? err.message : "Failed to save workflow";
+			// Nothing changed on the server yet: keep the user's rows and show the error here.
+			if (applied === 0) setError(text);
+			else onSaved({ error: text });
 		} finally {
 			setSaving(false);
 		}
@@ -166,7 +192,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 					>
 						<span
 							draggable
-							aria-label={`Drag ${row.name}`}
+							aria-hidden="true"
 							onDragStart={(e) => {
 								dragIndex.current = index;
 								e.dataTransfer.effectAllowed = "move";
@@ -219,6 +245,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 						<button
 							type="button"
 							aria-label={`Delete ${row.name}`}
+							disabled={!usageLoaded}
 							onClick={() => handleDelete(row)}
 							className="px-2 py-1 text-sm text-red-600 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-red-400"
 						>
@@ -231,6 +258,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 			<div className="mt-3 flex items-center gap-2">
 				<input
 					type="text"
+					ref={addInputRef}
 					aria-label="New status"
 					placeholder="New status"
 					value={newName}
@@ -287,7 +315,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 				>
 					{moveTargets(pendingDelete).map((status) => (
 						<option key={status} value={status}>
-							{status}
+							{targetLabel(status)}
 						</option>
 					))}
 				</select>
@@ -309,8 +337,6 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ config, onSaved }) => {
 					</button>
 				</div>
 			</Modal>
-
-			{saved && <SuccessToast message="Workflow saved" onDismiss={() => setSaved(false)} />}
 		</div>
 	);
 };

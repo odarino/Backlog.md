@@ -61,6 +61,7 @@ describe("buildWorkflowPlan", () => {
 		const reordered = moveRow(withName(rows(), 2, "QA"), 2, -1);
 		const plan = buildWorkflowPlan(saved, reordered, []);
 		expect(plan).toEqual({
+			preAdd: null,
 			removals: [],
 			renames: [{ from: "Review", to: "QA" }],
 			statuses: ["To Do", "QA", "In Progress", "Done"],
@@ -72,6 +73,7 @@ describe("buildWorkflowPlan", () => {
 		const remaining = rows().filter((r) => r.original !== "In Progress");
 		const plan = buildWorkflowPlan(saved, remaining, removals);
 		expect(plan).toEqual({
+			preAdd: null,
 			removals,
 			renames: [],
 			statuses: ["To Do", "Review", "Done"],
@@ -89,6 +91,47 @@ describe("buildWorkflowPlan", () => {
 	it("allows a case-only rename", () => {
 		const plan = buildWorkflowPlan(saved, withName(rows(), 0, "TO DO"), []);
 		expect(plan).toMatchObject({ renames: [{ from: "To Do", to: "TO DO" }] });
+	});
+	it("adds new statuses first when removals could shrink the list", () => {
+		const abc = ["A", "B", "C"];
+		const start = rowsFromConfig(abc, undefined);
+		const edited = insertNewRow(
+			start.filter((r) => r.original === "C"),
+			"D",
+			"new-1",
+		);
+		const removals = [
+			{ status: "A", moveTo: null },
+			{ status: "B", moveTo: null },
+		];
+		expect(buildWorkflowPlan(abc, edited, removals)).toEqual({
+			preAdd: ["D"],
+			removals,
+			renames: [],
+			statuses: ["D", "C"],
+			statusColors: {},
+		});
+	});
+	it("has no preAdd without removals or new rows", () => {
+		expect(buildWorkflowPlan(saved, insertNewRow(rows(), "X", "new-1"), [])).toMatchObject({ preAdd: null });
+		expect(buildWorkflowPlan(saved, rows(), [])).toMatchObject({ preAdd: null });
+	});
+	it("rejects a final list below 2 statuses", () => {
+		const removals = [
+			{ status: "To Do", moveTo: null },
+			{ status: "In Progress", moveTo: null },
+			{ status: "Review", moveTo: null },
+		];
+		const plan = buildWorkflowPlan(saved, rows().slice(3), removals);
+		expect(plan).toEqual({ error: expect.any(String) });
+	});
+	it("rejects a swap of two saved names", () => {
+		const swapped = withName(withName(rows(), 0, "In Progress"), 1, "To Do");
+		expect(buildWorkflowPlan(saved, swapped, [])).toEqual({ error: expect.any(String) });
+	});
+	it("rejects a rename to the name of a new row", () => {
+		const added = insertNewRow(rows(), "QA", "new-1");
+		expect(buildWorkflowPlan(saved, withName(added, 0, "QA"), [])).toEqual({ error: expect.any(String) });
 	});
 	it("returns the validation error for invalid rows", () => {
 		expect(buildWorkflowPlan(saved, withName(rows(), 0, ""), [])).toEqual({ error: expect.any(String) });

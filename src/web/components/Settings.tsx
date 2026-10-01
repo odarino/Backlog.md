@@ -4,13 +4,21 @@ import { SuccessToast } from './SuccessToast';
 import WorkflowEditor from './WorkflowEditor';
 import type { BacklogConfig } from '../../types';
 
+// JSON.stringify with sorted object keys, so key order never reads as a change.
+const stableStringify = (value: unknown): string =>
+	JSON.stringify(value, (_key, item) =>
+		item && typeof item === 'object' && !Array.isArray(item)
+			? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+			: item,
+	);
+
 const Settings: React.FC = () => {
 	const [config, setConfig] = useState<BacklogConfig | null>(null);
 	const [originalConfig, setOriginalConfig] = useState<BacklogConfig | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [showSuccess, setShowSuccess] = useState(false);
+	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const [statuses, setStatuses] = useState<string[]>([]);
 	const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -43,16 +51,30 @@ const Settings: React.FC = () => {
 	};
 
 	// Refresh the workflow fields from the server and keep the user's other unsaved edits.
-	const reloadWorkflow = async () => {
+	const reloadWorkflow = async (result: { error?: string }) => {
 		try {
 			const fresh = await apiClient.fetchConfig();
+			const previousDefault = originalConfig?.defaultStatus;
 			setOriginalConfig(fresh);
 			setConfig((current) =>
 				current
-					? { ...current, statuses: fresh.statuses, statusColors: fresh.statusColors, defaultStatus: fresh.defaultStatus }
+					? {
+							...current,
+							statuses: fresh.statuses,
+							statusColors: fresh.statusColors,
+							// Keep a default status the user changed but has not saved yet.
+							defaultStatus: current.defaultStatus === previousDefault ? fresh.defaultStatus : current.defaultStatus,
+						}
 					: fresh,
 			);
 			await loadStatuses();
+			if (result.error) {
+				setError(`${result.error}. Some changes were saved; the workflow was reloaded.`);
+			} else {
+				setError(null);
+				setSuccessMessage('Workflow saved');
+				setTimeout(() => setSuccessMessage(null), 3000);
+			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to load configuration');
 		}
@@ -112,8 +134,8 @@ const Settings: React.FC = () => {
 			await apiClient.updateConfig(normalizedConfig);
 			setConfig(normalizedConfig);
 			setOriginalConfig(normalizedConfig);
-			setShowSuccess(true);
-			setTimeout(() => setShowSuccess(false), 3000);
+			setSuccessMessage('Settings saved successfully!');
+			setTimeout(() => setSuccessMessage(null), 3000);
 			setError(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to save configuration');
@@ -127,7 +149,7 @@ const Settings: React.FC = () => {
 		setValidationErrors({});
 	};
 
-	const hasUnsavedChanges = JSON.stringify(config) !== JSON.stringify(originalConfig);
+	const hasUnsavedChanges = stableStringify(config) !== stableStringify(originalConfig);
 
 	if (loading) {
 		return (
@@ -528,10 +550,10 @@ const Settings: React.FC = () => {
 			</div>
 
 			{/* Success Toast */}
-			{showSuccess && (
+			{successMessage && (
 				<SuccessToast
-					message="Settings saved successfully!"
-					onDismiss={() => setShowSuccess(false)}
+					message={successMessage}
+					onDismiss={() => setSuccessMessage(null)}
 				/>
 			)}
 		</div>
