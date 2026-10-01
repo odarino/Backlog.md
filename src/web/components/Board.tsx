@@ -44,6 +44,7 @@ interface BoardProps {
   onFiltersChange?: (filters: { assignee: string; labels: string[]; priority: string; taskType: string; project: string }) => void;
   hideEmptyColumns?: boolean;
   dateFormat?: string;
+  statusColors?: Record<string, string>;
 }
 
 const BOARD_FILTER_SELECT_CLASS =
@@ -80,6 +81,7 @@ const Board: React.FC<BoardProps> = ({
   onFiltersChange,
   hideEmptyColumns = false,
   dateFormat,
+  statusColors,
 }) => {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -897,6 +899,7 @@ const Board: React.FC<BoardProps> = ({
                             availableTypes={typeOptions}
                             availableProjects={projectOptions}
                             dateFormat={dateFormat}
+                            statusColors={statusColors}
                             onDragStart={handleColumnDragStart}
                             onDragEnd={handleColumnDragEnd}
                             onCleanup={status === terminalStatus ? () => setShowCleanupModal(true) : undefined}
@@ -929,6 +932,7 @@ const Board: React.FC<BoardProps> = ({
                   availableTypes={typeOptions}
                   availableProjects={projectOptions}
                   dateFormat={dateFormat}
+                  statusColors={statusColors}
                   onDragStart={handleColumnDragStart}
                   onDragEnd={handleColumnDragEnd}
                   onCleanup={status === terminalStatus ? () => setShowCleanupModal(true) : undefined}

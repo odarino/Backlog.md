@@ -3,6 +3,7 @@ import { type Task } from '../../types';
 import { compareTaskIds, sortByPriority } from '../../utils/task-sorting';
 import type { ReorderTaskPayload } from '../lib/api';
 import { parseStoredUtcDate } from '../utils/date-display';
+import { statusColorFor } from '../lib/status-colors';
 import TaskCard from './TaskCard';
 
 interface TaskColumnProps {
@@ -29,6 +30,7 @@ interface TaskColumnProps {
   onBatchMove?: (targetStatus: string, targetMilestone?: string | null) => void;
   isSelectionDragging?: boolean;
   onSelectionDragChange?: (active: boolean) => void;
+  statusColors?: Record<string, string>;
 }
 
 type CreatedDateSortDirection = 'asc' | 'desc';
@@ -83,6 +85,7 @@ const TaskColumn: React.FC<TaskColumnProps> = ({
   onBatchMove,
   isSelectionDragging,
   onSelectionDragChange,
+  statusColors,
 }) => {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [draggedTaskId, setDraggedTaskId] = React.useState<string | null>(null);
@@ -232,6 +235,7 @@ const TaskColumn: React.FC<TaskColumnProps> = ({
     }
   };
 
+  const statusColor = statusColorFor(statusColors, title);
   const isEmpty = tasks.length === 0;
 
   return (
@@ -252,6 +256,9 @@ const TaskColumn: React.FC<TaskColumnProps> = ({
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
+          {statusColor && (
+            <span aria-hidden="true" data-status-color className="inline-block h-2.5 w-2.5 rounded-circle" style={{ backgroundColor: statusColor }} />
+          )}
           <h3 className="font-semibold text-gray-900 dark:text-gray-100 transition-colors duration-200">{title}</h3>
           <span className={`px-2 py-1 text-xs font-medium rounded-circle ${getStatusBadgeClass(title)}`}>
             {tasks.length}

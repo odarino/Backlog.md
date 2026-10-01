@@ -950,6 +950,7 @@ function AppContent() {
       loadError={loadError}
       hideEmptyColumns={config?.hideEmptyColumns ?? false}
       dateFormat={config?.dateFormat}
+      statusColors={config?.statusColors}
       availablePriorities={config?.priorities}
       availableTypes={availableTypes}
       availableProjects={availableProjects}
@@ -969,6 +970,7 @@ function AppContent() {
       archivedMilestones={archivedMilestones}
       onRefreshData={refreshData}
       dateFormat={config?.dateFormat}
+      statusColors={config?.statusColors}
       isLoading={isLoading}
     />
   );
