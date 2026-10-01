@@ -2114,6 +2114,43 @@ addHelpSchema(taskCmd.command("create [title]"), {
 		}
 	});
 
+addHelpSchema(taskCmd.command("clone <id>"), {
+	required: [{ name: "id", type: "Task ID", description: "Task or draft to copy" }],
+	optional: [{ name: "title", type: "String", description: 'Title of the copy; defaults to "Copy of <title>"' }],
+	writes: "Creates a task or draft markdown file through Backlog.md",
+	output: "Created task details; use --plain for text output",
+	examples: ["backlog task clone {{TASK_ID:1}}", 'backlog task clone {{TASK_ID:1}} --title "Add tests"'],
+})
+	.option("--title <title>", "title of the copy")
+	.option("--plain", "use plain text output after cloning")
+	.action(async (id: string, options) => {
+		if (options.title !== undefined && String(options.title).trim().length === 0) {
+			printMissingRequiredArgument("title");
+			return;
+		}
+
+		const cwd = await requireProjectRoot();
+		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
+
+		try {
+			const { task, filePath } = await core.cloneTask(id, {
+				title: options.title !== undefined ? String(options.title) : undefined,
+			});
+
+			if (isPlainRequested(options)) {
+				console.log(formatTaskPlainText(await loadTaskDetail(core, task), { filePathOverride: filePath }));
+				return;
+			}
+
+			console.log(`Created ${task.id.startsWith("DRAFT-") ? "draft" : "task"} ${task.id}`);
+			console.log(`File: ${filePath}`);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			process.exitCode = 1;
+		}
+	});
+
 const searchCommand = addHelpSchema(program.command("search [query]"), {
 	reads: "Tasks, documents, and decisions from the configured backlog directory",
 	required: [],

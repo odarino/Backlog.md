@@ -10,7 +10,7 @@ import {
 import { createSimpleValidatedTool } from "../../validation/tool-wrapper.ts";
 import type { TaskCreateArgs, TaskEditRequest, TaskListArgs, TaskSearchArgs } from "./handlers.ts";
 import { TaskHandlers } from "./handlers.ts";
-import { taskArchiveSchema, taskCompleteSchema, taskViewSchema } from "./schemas.ts";
+import { taskArchiveSchema, taskCloneSchema, taskCompleteSchema, taskViewSchema } from "./schemas.ts";
 
 export function registerTaskTools(server: McpServer, config: BacklogConfig): void {
 	const handlers = new TaskHandlers(server);
@@ -29,6 +29,18 @@ export function registerTaskTools(server: McpServer, config: BacklogConfig): voi
 		},
 		taskCreateSchema,
 		async (input) => handlers.createTask(input as TaskCreateArgs),
+	);
+
+	const cloneTaskTool: McpToolHandler = createSimpleValidatedTool(
+		{
+			name: "task_clone",
+			description:
+				"Copy a task into a new task: copies the content, labels, links and checklists (unchecked); resets status, notes, summary and comments",
+			inputSchema: taskCloneSchema,
+			annotations: { title: "Clone Task", destructiveHint: false },
+		},
+		taskCloneSchema,
+		async (input) => handlers.cloneTask(input as { id: string; title?: string }),
 	);
 
 	const listTaskTool: McpToolHandler = createSimpleValidatedTool(
@@ -101,6 +113,7 @@ export function registerTaskTools(server: McpServer, config: BacklogConfig): voi
 	);
 
 	server.addTool(createTaskTool);
+	server.addTool(cloneTaskTool);
 	server.addTool(listTaskTool);
 	server.addTool(searchTaskTool);
 	server.addTool(editTaskTool);

@@ -173,6 +173,22 @@ export class TaskHandlers {
 		}
 	}
 
+	async cloneTask(args: { id: string; title?: string }): Promise<CallToolResult> {
+		try {
+			const { task } = await this.core.cloneTask(args.id, { title: args.title });
+			return await formatTaskCallResult(await loadTaskDetail(this.core, task), [`Cloned ${args.id} to ${task.id}.`]);
+		} catch (error) {
+			if (error instanceof BacklogToolError) {
+				throw error;
+			}
+			if (isCreateLockError(error)) {
+				throw new BacklogToolError(error.message, "OPERATION_FAILED");
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			throw new BacklogToolError(message, message.startsWith("Task not found") ? "TASK_NOT_FOUND" : "VALIDATION_ERROR");
+		}
+	}
+
 	async listTasks(args: TaskListArgs = {}): Promise<CallToolResult> {
 		if (args.assignee && args.unassigned) {
 			throw new BacklogToolError("unassigned cannot be combined with assignee.", "VALIDATION_ERROR");
