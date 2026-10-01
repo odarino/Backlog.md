@@ -37,6 +37,7 @@
 5. **The picker needs the same key guard as the lightbox.** `TaskDetailsModal` has a `window` capture `keydown` listener and `Modal` has a `document` capture listener; both would take Escape from the picker. `TaskMarkdownEditor` reports an open overlay, and `TaskDetailsModal` treats it like an open lightbox.
 6. **Placeholders carry a unique token:** `![Uploading my-shot.png…](uploading:<token>)`, so two uploads with the same name never replace each other's placeholder.
 7. **The folder name is the lowercase task ID** (`task-12`). The `taskId` in `GET /api/assets` results is that folder name.
+8. **The route handlers live in `src/server/index.ts`,** next to the existing routes, not in `src/server/assets.ts`. All routes are inline in `start()`, and the core logic is already separate in `src/core/assets.ts`.
 
 ## File Structure
 
