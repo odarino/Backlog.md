@@ -18,7 +18,7 @@ import {
 	getPriorityRank,
 	resolvePriorityValue,
 } from "../../utils/priority-config.ts";
-import { statusChipStyle, statusColorFor } from "../lib/status-colors";
+import { statusChipStyle } from "../lib/status-colors";
 import CleanupModal from "./CleanupModal";
 import StoredDate from "./StoredDate";
 import AcceptanceCriteriaProgress from "./AcceptanceCriteriaProgress";
@@ -863,6 +863,7 @@ const TaskList: React.FC<TaskListProps> = ({
 							<tbody className="divide-y divide-gray-200 dark:divide-gray-700">
 								{sortedDisplayTasks.map((task) => {
 									const isFromOtherBranch = Boolean(task.branch);
+									const statusStyle = statusChipStyle(statusColors, task.status);
 									const visibleLabels = task.labels.slice(0, 2);
 									const labelOverflow = Math.max(task.labels.length - visibleLabels.length, 0);
 									const visibleAssignees = task.assignee.slice(0, 2);
@@ -918,8 +919,8 @@ const TaskList: React.FC<TaskListProps> = ({
 											</td>
 											<td className="px-3 py-2.5">
 												<span
-													className={`inline-flex rounded-circle px-2 py-0.5 text-[11px] font-medium ${statusColorFor(statusColors, task.status) ? "" : getStatusColor(task.status)}`}
-													style={statusChipStyle(statusColors, task.status)}
+													className={`inline-flex rounded-circle px-2 py-0.5 text-[11px] font-medium ${statusStyle ? "" : getStatusColor(task.status)}`}
+													style={statusStyle}
 												>
 													{task.status}
 												</span>
