@@ -1,5 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import decodeWebp from "@jsquash/webp/decode";
+import encodeWebp from "@jsquash/webp/encode";
 import {
 	compressImage,
 	compressOptionsFromConfig,
@@ -8,7 +9,7 @@ import {
 	ImageDecodeError,
 	UnsupportedImageError,
 } from "../core/image-compress.ts";
-import { jpegFixture, pngFixture, withExifOrientation } from "./image-fixtures.ts";
+import { jpegFixture, pngFixture, syntheticImage, withExifOrientation } from "./image-fixtures.ts";
 
 const ascii = (text: string) => new TextEncoder().encode(text);
 const webpSize = async (bytes: Uint8Array) => {
@@ -64,6 +65,20 @@ describe("compressOptionsFromConfig", () => {
 });
 
 describe("compressImage", () => {
+	// The mozjpeg decoder binds console.error when the codecs load (first compressImage call).
+	// Install the capture before that call, and forward everything outside the capture window.
+	const originalConsoleError = console.error;
+	let captured: string[] | null = null;
+	beforeAll(() => {
+		console.error = (...args: unknown[]) => {
+			if (captured) captured.push(args.join(" "));
+			else originalConsoleError(...args);
+		};
+	});
+	afterAll(() => {
+		console.error = originalConsoleError;
+	});
+
 	it("resizes a large JPEG and encodes a smaller WebP", async () => {
 		const input = await jpegFixture(2400, 1600);
 		const result = await compressImage(input, { maxDimension: 1920, quality: 0.8 });
@@ -89,10 +104,13 @@ describe("compressImage", () => {
 	});
 
 	it("keeps the original bytes when the WebP is not smaller", async () => {
-		const input = await jpegFixture(128, 128, { quality: 10, noise: 255 });
+		// A 1x3 PNG is tiny: its lossy WebP is about 1.37x larger (114 bytes vs 83 bytes).
+		const input = await pngFixture(1, 3);
 		const result = await compressImage(input, { maxDimension: 1920, quality: 1 });
+		const webp = new Uint8Array(await encodeWebp(syntheticImage(1, 3), { quality: 100 }));
+		expect(webp.byteLength).toBeGreaterThan(input.byteLength * 1.3);
 		expect(result.compressed).toBe(false);
-		expect(result.extension).toBe("jpg");
+		expect(result.extension).toBe("png");
 		expect(result.bytes).toEqual(input);
 	});
 
@@ -112,7 +130,15 @@ describe("compressImage", () => {
 
 	it("rejects a corrupt JPEG with ImageDecodeError", async () => {
 		const corrupt = new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x01, 0x02, 0x03]);
-		await expect(compressImage(corrupt, { maxDimension: 1920, quality: 0.8 })).rejects.toBeInstanceOf(ImageDecodeError);
+		captured = [];
+		try {
+			await expect(compressImage(corrupt, { maxDimension: 1920, quality: 0.8 })).rejects.toBeInstanceOf(
+				ImageDecodeError,
+			);
+			expect(captured.join("\n")).toContain("JPEG");
+		} finally {
+			captured = null;
+		}
 	});
 
 	it("rejects unknown data with UnsupportedImageError", async () => {
