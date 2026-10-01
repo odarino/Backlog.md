@@ -7,14 +7,46 @@
 <p align="center">AI agents write the code. You review the tasks: before, during, and after.</p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/backlog.md"><img src="https://img.shields.io/npm/v/backlog.md?color=brightgreen" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/backlog.md"><img src="https://img.shields.io/npm/dm/backlog.md" alt="npm downloads"></a>
-  <a href="https://github.com/MrLesk/Backlog.md/blob/main/LICENSE"><img src="https://img.shields.io/github/license/MrLesk/Backlog.md" alt="MIT license"></a>
-  <a href="https://github.com/MrLesk/Backlog.md"><img src="https://img.shields.io/github/stars/MrLesk/Backlog.md?style=social" alt="GitHub stars"></a>
+  <a href="https://www.npmjs.com/package/@odarino/backlog.md"><img src="https://img.shields.io/npm/v/@odarino/backlog.md?color=brightgreen" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@odarino/backlog.md"><img src="https://img.shields.io/npm/dm/@odarino/backlog.md" alt="npm downloads"></a>
+  <a href="https://github.com/odarino/Backlog.md/blob/main/LICENSE"><img src="https://img.shields.io/github/license/odarino/Backlog.md" alt="MIT license"></a>
+  <a href="https://github.com/odarino/Backlog.md"><img src="https://img.shields.io/github/stars/odarino/Backlog.md?style=social" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
-<code>npm i -g backlog.md</code>
+<code>npm i -g @odarino/backlog.md</code>
+
+## About this fork
+
+This is a fork of [MrLesk/Backlog.md](https://github.com/MrLesk/Backlog.md) with extra web UI features. The command is still `backlog`.
+
+> **Note:** Do not install this package and the original `backlog.md` globally at the same time. Both provide the `backlog` command. Uninstall one first: `npm uninstall -g backlog.md`.
+
+### Fork features
+
+- **Image zoom.** Click an image in a task, a document, or a decision to open it full screen. Zoom with the mouse wheel, a double-click, or a pinch. Drag to pan. Use the arrow keys to move between all images of the task.
+- **Image upload, paste, and drag-drop.** Paste a screenshot or drop image files into any task editor. The server compresses each image to WebP and saves it under `backlog/assets/images/<task-id>/`. Images that you add before a task has an ID go to `_unsorted/`, and they move to the task folder when you create the task.
+- **Image picker.** The image button in the editor toolbar opens a picker. Search, select, and insert existing images, or upload new ones.
+- **Workflow editor.** In Settings, add, rename, reorder, color, and delete statuses. A rename or delete rewrites the affected tasks in `tasks/`, `completed/`, and `archive/`. Status colors show on the board columns and in the task list.
+- **Safer local server.** The web server rejects requests from other websites and DNS rebinding.
+
+### Configuration
+
+| Key | Default | Range | Purpose |
+|-----|---------|-------|---------|
+| `image_max_dimension` | `1920` | 256–8192 | The longest side of a compressed image, in pixels |
+| `image_quality` | `0.8` | 0.1–1.0 | WebP quality |
+| `status_colors` | none | `#rrggbb` per status | Status colors, for example `{"Done":"#10b981"}` |
+
+### Limits
+
+- Images over 50 megapixels are rejected. Shrink them first.
+- GIF, SVG, and AVIF images are saved unchanged.
+- With `auto_commit` on, a rename or delete of a status makes one commit for the task files and `config.yml`. A Settings save also commits `config.yml`.
+- A running MCP server keeps the old status names until it restarts.
+- Tasks that exist only on other git branches are not rewritten when you rename or delete a status.
+- Two processes that change the workflow at the same moment can still conflict. Reload and try again.
+- The web UI accepts only `http://127.0.0.1:<port>` and `http://localhost:<port>`. Access through a tunnel or a proxy is blocked.
 </p>
 
 ![Backlog demo GIF using: backlog board](./.github/backlog-v1.40.gif)
@@ -77,8 +109,8 @@ Backlog.md itself. The full task ledger lives in this repo's [backlog folder](ba
 
 ```bash
 # Install
-npm i -g backlog.md
-# or: bun add -g backlog.md
+npm i -g @odarino/backlog.md
+# or: bun add -g @odarino/backlog.md
 # or: brew install backlog-md
 # or: nix run github:MrLesk/Backlog.md
 
@@ -90,9 +122,9 @@ backlog init "Personal Planning" --no-git
 ```
 
 > [!TIP]
-> **Running one-off with `npx`?** This tool's npm package is named `backlog.md`, so use the full name: `npx backlog.md init "My Project"`, `npx backlog.md board`.
+> **Running one-off with `npx`?** This tool's npm package is named `@odarino/backlog.md`, so use the full name: `npx @odarino/backlog.md init "My Project"`, `npx @odarino/backlog.md board`.
 > Without an install, `npx backlog` resolves to an unrelated third-party npm package — not this tool.
-> (With `backlog.md` installed as a project dependency, `npx backlog` runs the local binary as usual.)
+> (With `@odarino/backlog.md` installed as a project dependency, `npx backlog` runs the local binary as usual.)
 
 ### Run with Nix
 
@@ -363,13 +395,13 @@ If the architectures disagree, reinstall with the native one:
 brew reinstall backlog-md
 
 # npm
-arch -arm64 npm i -g backlog.md
+arch -arm64 npm i -g @odarino/backlog.md
 
 # Bun
-arch -arm64 bun add -g backlog.md
+arch -arm64 bun add -g @odarino/backlog.md
 ```
 
-Running an x64 Node under Rosetta on purpose also works: `backlog` falls back to whichever `backlog.md-darwin-*` package is present.
+Running an x64 Node under Rosetta on purpose also works: `backlog` falls back to whichever `@odarino/backlog.md-darwin-*` package is present.
 
 ---
 
