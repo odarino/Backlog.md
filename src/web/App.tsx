@@ -521,11 +521,8 @@ function AppContent() {
   };
 
   const handleCloneTask = (task: Task) => {
-    setModal({
-      kind: 'create',
-      isDraft: (task.status ?? '').toLowerCase() === 'draft',
-      prefill: buildTaskCloneInput(task),
-    });
+    const prefill = buildTaskCloneInput(task);
+    setModal({ kind: 'create', isDraft: prefill.status === 'Draft', prefill });
   };
 
   const handleNewDraft = () => {
@@ -622,6 +619,8 @@ function AppContent() {
     if (current.kind === 'detail' && current.fromRoute && current.id === routeTaskId) {
       return;
     }
+    // The URL still names the cloned task while the clone form is open; do not replace the form.
+    if (current.kind === 'create') return;
     openDetailModal(routeTaskId, { fromRoute: true });
   }, [clearTaskModal, isInitialized, location.search, navigate, openDetailModal, routeBasePath, routeTaskId]);
 

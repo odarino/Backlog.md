@@ -237,6 +237,55 @@ describe("task clone in the web UI", () => {
 		expect(closes).toBe(1);
 	});
 
+	it("asks for confirmation when cancelling after an edit", async () => {
+		let closes = 0;
+		const container = await mountCreate(
+			async () => {},
+			() => {
+				closes += 1;
+			},
+		);
+		const titleInput = container.querySelector<HTMLInputElement>('input[type="text"]');
+		await act(async () => {
+			const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+			setter?.call(titleInput, "Edited copy");
+			titleInput?.dispatchEvent(new window.Event("input", { bubbles: true }));
+			await Promise.resolve();
+		});
+		let confirmCalls = 0;
+		window.confirm = () => {
+			confirmCalls += 1;
+			return false;
+		};
+		await click(findButton(container, "Cancel"));
+		expect(confirmCalls).toBe(1);
+		expect(closes).toBe(0);
+	});
+
+	it("opens a draft clone in draft mode", async () => {
+		const submitted: Partial<Task>[] = [];
+		const draft: Task = { ...sourceTask, id: "DRAFT-2", status: "Draft" };
+		const prefill = buildTaskCloneInput(draft);
+		expect(prefill.status).toBe("Draft");
+		const container = await mount(
+			<TaskDetailsModal
+				isOpen={true}
+				onClose={() => {}}
+				onSubmit={async (data) => {
+					submitted.push(data);
+				}}
+				availableStatuses={statuses}
+				availableTasks={[draft]}
+				isDraftMode={true}
+				prefill={prefill}
+			/>,
+			[draft],
+		);
+		expect(document.body.textContent).toContain("Create New Draft");
+		await click(findButton(container, "Create"));
+		expect(submitted[0]?.status).toBe("Draft");
+	});
+
 	it("shows Clone in view mode and calls onClone with the task", async () => {
 		const cloned: Task[] = [];
 		const detail = detailOf(sourceTask, [sourceTask]);
