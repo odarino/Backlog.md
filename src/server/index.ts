@@ -1740,7 +1740,7 @@ export class BacklogServer {
 				const currentStatuses = current?.statuses ?? [];
 				// Existing statuses change only through rename or remove; this route may reorder and add.
 				if (updatedConfig.statuses !== undefined) {
-					updatedConfig.statuses = validateStatusList(updatedConfig.statuses);
+					updatedConfig.statuses = validateStatusList(updatedConfig.statuses, currentStatuses);
 					const next = new Set<string>(updatedConfig.statuses);
 					if (currentStatuses.some((status) => !next.has(status))) {
 						return Response.json({ error: "Use rename or remove to change existing statuses" }, { status: 409 });
