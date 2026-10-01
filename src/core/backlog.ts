@@ -80,6 +80,7 @@ import {
 	stringArraysEqual,
 	validateDependencies,
 } from "../utils/task-builders.ts";
+import { buildTaskCloneInput } from "../utils/task-clone.ts";
 import { withoutVacatedTaskLinks } from "../utils/task-links.ts";
 import {
 	AmbiguousTaskIdError,
@@ -1753,6 +1754,12 @@ export class Core {
 		}
 
 		return { indexRestored, workingPathRestored };
+	}
+
+	async cloneTask(taskId: string, options: { title?: string } = {}): Promise<{ task: Task; filePath?: string }> {
+		const source = (await this.fs.loadDraft(taskId)) ?? (await this.getTask(taskId));
+		if (!source) throw new Error(`Task not found: ${taskId}`);
+		return await this.createTaskFromInput(buildTaskCloneInput(source, options));
 	}
 
 	async createTaskFromInput(input: TaskCreateInput, autoCommit?: boolean): Promise<{ task: Task; filePath?: string }> {
