@@ -155,8 +155,10 @@ describe("workflow validation", () => {
 		const statuses = ["To Do", "Review", "Done"];
 		expect(validateStatusColors({ review: "#8B5CF6" }, statuses)).toEqual({ Review: "#8b5cf6" });
 		expect(validateStatusColors(undefined, statuses)).toEqual({});
-		expectWorkflowError(() => validateStatusColors({ Nope: "#000000" }, statuses), 400);
+		expect(validateStatusColors({ Nope: "#000000", Done: "#10B981" }, statuses)).toEqual({ Done: "#10b981" });
+		expect(validateStatusColors({ Nope: "not a color" }, statuses)).toEqual({});
 		expectWorkflowError(() => validateStatusColors({ Review: "red" }, statuses), 400);
+		expectWorkflowError(() => validateStatusColors({ review: "#111111", Review: "#222222" }, statuses), 400);
 	});
 });
 
