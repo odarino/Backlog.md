@@ -2,7 +2,7 @@ import net from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { DEFAULT_STATUSES } from "../constants/index.ts";
-import { AssetError, listAssets, MAX_ASSET_BYTES, saveAsset } from "../core/assets.ts";
+import { AssetError, claimUnsortedAssets, listAssets, MAX_ASSET_BYTES, saveAsset } from "../core/assets.ts";
 import { Core, TaskArchiveStatusError } from "../core/backlog.ts";
 import type { ContentStore } from "../core/content-store.ts";
 import { compressOptionsFromConfig } from "../core/image-compress.ts";
@@ -1071,7 +1071,12 @@ export class BacklogServer {
 				definitionOfDoneAdd,
 				disableDefinitionOfDoneDefaults,
 			});
-			return Response.json(createdTask, { status: 201 });
+			const finalTask = await claimUnsortedAssets(this.core, this.assetsRoot(), createdTask).catch((error) => {
+				// The task exists; a failed claim must not turn the create into an error.
+				console.error("Failed to claim unsorted assets", error);
+				return createdTask;
+			});
+			return Response.json(finalTask, { status: 201 });
 		} catch (error) {
 			if (isCreateLockError(error)) {
 				const message = error instanceof Error ? error.message : "Failed to create task";

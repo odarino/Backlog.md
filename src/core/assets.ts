@@ -1,7 +1,7 @@
-import type { Dirent, Stats } from "node:fs";
-import { link, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { constants, type Dirent, type Stats } from "node:fs";
+import { copyFile, link, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
-import type { AssetEntry, SavedAsset } from "../types/index.ts";
+import type { AssetEntry, SavedAsset, Task, TaskUpdateInput } from "../types/index.ts";
 import { type CompressOptions, compressImage, ImageDecodeError, UnsupportedImageError } from "./image-compress.ts";
 
 export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
@@ -157,4 +157,65 @@ export async function listAssets(assetsRoot: string, taskId?: string | null): Pr
 	await walk(assetsRoot);
 	const rank = (entry: AssetEntry) => (currentFolder !== null && entry.taskId === currentFolder ? 0 : 1);
 	return entries.sort((a, b) => rank(a) - rank(b) || b.mtime.localeCompare(a.mtime) || a.path.localeCompare(b.path));
+}
+
+const UNSORTED_LINK = /\/assets\/images\/_unsorted\/[^\s)"'<>]+/g;
+const CLAIMABLE_FIELDS = ["description", "implementationPlan", "implementationNotes", "finalSummary"] as const;
+
+export interface AssetClaimCore {
+	filesystem: { listTasks(): Promise<Task[]>; listDrafts(): Promise<Task[]> };
+	editTaskOrDraft(taskId: string, input: TaskUpdateInput): Promise<{ task: Task }>;
+}
+
+export function findUnsortedAssetLinks(markdown: string): string[] {
+	return [...new Set(markdown.match(UNSORTED_LINK) ?? [])];
+}
+
+async function fileExists(path: string): Promise<boolean> {
+	return stat(path).then(
+		(info) => info.isFile(),
+		() => false,
+	);
+}
+
+/**
+ * Move images uploaded before the task had an ID from images/_unsorted/ into images/<task-id>/ and
+ * rewrite the links. A file that another saved task or draft also links is copied, not moved.
+ */
+export async function claimUnsortedAssets(core: AssetClaimCore, assetsRoot: string, task: Task): Promise<Task> {
+	const links = new Set(CLAIMABLE_FIELDS.flatMap((field) => findUnsortedAssetLinks(task[field] ?? "")));
+	if (links.size === 0) return task;
+
+	const others = [...(await core.filesystem.listTasks()), ...(await core.filesystem.listDrafts())].filter(
+		(other) => other.id !== task.id,
+	);
+	const dir = join(assetsRoot, "images", assetFolderForTask(task.id));
+	const replacements = new Map<string, string>();
+
+	for (const linkPath of links) {
+		const relPath = decodeURIComponent(linkPath.slice("/assets/".length));
+		if (relPath.split("/").includes("..")) continue;
+		const source = join(assetsRoot, ...relPath.split("/"));
+		if (!(await fileExists(source))) continue;
+		const shared = others.some((other) => CLAIMABLE_FIELDS.some((field) => (other[field] ?? "").includes(linkPath)));
+		await mkdir(dir, { recursive: true });
+		const extension = extname(source).slice(1);
+		const target = await placeWithoutClobber(dir, basename(source, extname(source)), extension, (candidate) =>
+			shared ? copyFile(source, candidate, constants.COPYFILE_EXCL) : link(source, candidate),
+		);
+		if (!shared) await unlink(source);
+		replacements.set(linkPath, toPublicPath(assetsRoot, target));
+	}
+	if (replacements.size === 0) return task;
+
+	const input: TaskUpdateInput = {};
+	for (const field of CLAIMABLE_FIELDS) {
+		const current = task[field];
+		if (!current) continue;
+		let next = current;
+		for (const [from, to] of replacements) next = next.split(from).join(to);
+		if (next !== current) input[field] = next;
+	}
+	const { task: updated } = await core.editTaskOrDraft(task.id, input);
+	return updated;
 }
