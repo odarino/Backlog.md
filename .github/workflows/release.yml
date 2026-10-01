@@ -10,7 +10,6 @@ permissions:
 
 env:
   BUN_VERSION: 1.3.14
-  NPM_SCOPE: "@odarino"
 
 jobs:
   build:
@@ -145,11 +144,18 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd dist
+          NAME="$(jq -r .name package.json)"
+          VERSION="$(jq -r .version package.json)"
+          if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null || true)" = "$VERSION" ]; then
+            echo "$NAME@$VERSION is already published; skipping"
+            exit 0
+          fi
           npm publish --access public --provenance
 
   publish-binaries:
     needs: build
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: bun-linux-x64-baseline
@@ -247,6 +253,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd pkg
+          NAME="$(jq -r .name package.json)"
+          VERSION="$(jq -r .version package.json)"
+          if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null || true)" = "$VERSION" ]; then
+            echo "$NAME@$VERSION is already published; skipping"
+            exit 0
+          fi
           npm publish --access public --provenance
 
   verify-platform-packages:

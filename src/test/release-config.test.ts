@@ -28,10 +28,57 @@ describe("release configuration", () => {
 			".github/workflows/release.yml",
 		]) {
 			const text = await read(path);
-			// An unscoped platform package name is "backlog.md-<os>" not preceded by "@odarino/".
-			expect(text.match(/(?<!@odarino\/)backlog\.md-(linux|darwin|windows)/g) ?? []).toEqual([]);
+			// An unscoped package reference is "backlog.md-" or "backlog.md@" not preceded by "@odarino/".
+			expect(text.match(/(?<!@odarino\/)\bbacklog\.md[-@]/g) ?? []).toEqual([]);
 			expect(text).not.toContain("github.com/MrLesk/Backlog.md");
 			expect(text).not.toMatch(/npm i(nstall)? -g backlog\.md\b/);
 		}
+	});
+
+	describe("release workflow", () => {
+		type Step = {
+			name?: string;
+			uses?: string;
+			run?: string;
+			env?: Record<string, string>;
+			with?: Record<string, string>;
+		};
+		type Job = { strategy?: Record<string, unknown>; steps: Step[] };
+		const loadJobs = async () => {
+			const workflow = Bun.YAML.parse(await read(".github/workflows/release.yml")) as { jobs: Record<string, Job> };
+			return workflow.jobs;
+		};
+
+		it("publishes with public access, provenance and the npm token", async () => {
+			const jobs = await loadJobs();
+			const publishSteps = Object.values(jobs)
+				.flatMap((job) => job.steps)
+				.filter((step) => step.run?.includes("npm publish"));
+			expect(publishSteps.length).toBeGreaterThan(0);
+			for (const step of publishSteps) {
+				expect(step.run).toContain("--access public --provenance");
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression, not a JS template
+				expect(step.env?.NODE_AUTH_TOKEN).toBe("${{ secrets.NPM_TOKEN }}");
+			}
+		});
+
+		it("points setup-node at the npm registry in the publish jobs", async () => {
+			const jobs = await loadJobs();
+			const setupSteps = ["npm-publish", "publish-binaries"]
+				.flatMap((name) => jobs[name]?.steps ?? [])
+				.filter((step) => step.uses?.startsWith("actions/setup-node"));
+			expect(setupSteps.length).toBe(2);
+			for (const step of setupSteps) expect(step.with?.["registry-url"]).toBe("https://registry.npmjs.org");
+		});
+
+		it("is safe to re-run", async () => {
+			const jobs = await loadJobs();
+			expect(jobs["publish-binaries"]?.strategy?.["fail-fast"]).toBe(false);
+			const realPublishSteps = Object.values(jobs)
+				.flatMap((job) => job.steps)
+				.filter((step) => step.run?.includes("npm publish") && !step.run.includes("--dry-run"));
+			expect(realPublishSteps.length).toBe(2);
+			for (const step of realPublishSteps) expect(step.run).toContain("already published; skipping");
+		});
 	});
 });
