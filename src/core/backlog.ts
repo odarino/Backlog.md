@@ -2940,6 +2940,24 @@ export class Core {
 		return filePaths;
 	}
 
+	/**
+	 * Publish task files that were just rewritten in place to an in-process ContentStore, when one
+	 * exists. A process without a store has nothing to refresh, and building one here would load the
+	 * whole corpus after the writes already landed. Files in `archive/tasks/` are not in the store.
+	 */
+	async refreshTasksInContentStore(tasks: Task[]): Promise<void> {
+		const store = this.contentStore;
+		if (!store) return;
+		const folderOf = (task: Task) => (task.filePath ? dirname(task.filePath) : undefined);
+		await store.batchTaskUpdates(async () => {
+			for (const task of tasks) {
+				const folder = folderOf(task);
+				if (folder === this.fs.tasksDir) store.upsertTask(task);
+				else if (folder === this.fs.completedDir) store.refreshCompletedTask(task);
+			}
+		});
+	}
+
 	async updateTasksBulk(tasks: Task[], commitMessage?: string, autoCommit?: boolean): Promise<void> {
 		const filePaths = await this.fs.withTaskLocks(tasks, async () => await this.writeTasksBulk(tasks));
 
