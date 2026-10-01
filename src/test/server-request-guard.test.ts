@@ -49,6 +49,25 @@ describe("checkRequest", () => {
 		}
 	});
 
+	it("fails closed when the port is unknown", () => {
+		expect(checkRequest(makeRequest("GET", goodHost), null)?.status).toBe(421);
+	});
+
+	it("accepts bare hosts only on port 80", () => {
+		expect(checkRequest(makeRequest("GET", { host: "127.0.0.1" }), 80)).toBeNull();
+		expect(checkRequest(makeRequest("GET", { host: "localhost" }), 80)).toBeNull();
+		expect(checkRequest(makeRequest("POST", { host: "localhost", origin: "http://127.0.0.1" }), 80)).toBeNull();
+		expect(checkRequest(makeRequest("POST", { host: "localhost", origin: "https://evil.example" }), 80)?.status).toBe(
+			403,
+		);
+		expect(checkRequest(makeRequest("GET", { host: "127.0.0.1" }), PORT)?.status).toBe(421);
+		expect(checkRequest(makeRequest("POST", { ...goodHost, origin: "http://127.0.0.1" }), PORT)?.status).toBe(403);
+	});
+
+	it("rejects a trailing-dot host", () => {
+		expect(checkRequest(makeRequest("GET", { host: "localhost.:6420" }), PORT)?.status).toBe(421);
+	});
+
 	it("checks Origin on WebSocket upgrades", () => {
 		const ws = (origin: string) =>
 			checkRequest(makeRequest("GET", { ...goodHost, upgrade: "websocket", origin }), PORT);
