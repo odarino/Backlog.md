@@ -11,6 +11,7 @@ export interface WorkflowRemoval {
 }
 
 export interface WorkflowPlan {
+	preAdd: string[] | null; // new names to add first (after the saved list), so removals never leave fewer than 2
 	removals: WorkflowRemoval[];
 	renames: Array<{ from: string; to: string }>;
 	statuses: string[];
@@ -84,11 +85,27 @@ export function buildWorkflowPlan(
 		renames.push({ from: row.original, to });
 	}
 
+	// New names are added first, so removals never drop the workflow below 2 statuses.
+	// A new name that matches a saved status by key waits for the final update, after the removals.
+	const savedKeys = new Set(saved.map(statusKey));
+	const newNames = rows.filter((row) => row.original === null).map((row) => row.name.trim());
+	const preAdd = removals.length > 0 ? newNames.filter((name) => !savedKeys.has(statusKey(name))) : [];
+	const deferred = removals.length > 0 && preAdd.length < newNames.length;
+	if (deferred && saved.length - removals.length < 2) {
+		return { error: "Add a status with the name of an existing status in a separate save" };
+	}
+
 	const statusColors: Record<string, string> = {};
 	for (const row of rows) {
 		if (row.color) statusColors[row.name.trim()] = row.color.toLowerCase();
 	}
-	return { removals, renames, statuses: rows.map((row) => row.name.trim()), statusColors };
+	return {
+		preAdd: preAdd.length > 0 ? preAdd : null,
+		removals,
+		renames,
+		statuses: rows.map((row) => row.name.trim()),
+		statusColors,
+	};
 }
 
 export function hasWorkflowChanges(

@@ -79,7 +79,7 @@ const tick = () =>
 		await new Promise((resolve) => window.setTimeout(resolve, 0));
 	});
 
-const renderEditor = async (onSaved: () => void = () => {}) => {
+const renderEditor = async (onSaved: (result: { error?: string }) => void = () => {}) => {
 	setupDom();
 	const container = document.getElementById("root") as HTMLElement;
 	activeRoot = createRoot(container);
@@ -134,9 +134,9 @@ describe("WorkflowEditor", () => {
 	});
 
 	it("renames and reorders, then saves in order", async () => {
-		let saved = 0;
-		await renderEditor(() => {
-			saved += 1;
+		const saved: Array<{ error?: string }> = [];
+		await renderEditor((result) => {
+			saved.push(result);
 		});
 		await typeInto(nameInputs()[2] as HTMLInputElement, "QA");
 		await click(byLabel("Move QA up"));
@@ -148,7 +148,7 @@ describe("WorkflowEditor", () => {
 			["rename", "Review", "QA"],
 			["update", ["To Do", "QA", "In Progress", "Done"], {}],
 		]);
-		expect(saved).toBe(1);
+		expect(saved).toEqual([{}]);
 	});
 
 	it("sends the full status colors on save", async () => {
@@ -199,7 +199,7 @@ describe("WorkflowEditor", () => {
 		expect(save().disabled).toBe(true);
 	});
 
-	it("shows the server error and reloads when a call fails", async () => {
+	it("keeps the rows and skips the reload when the first call fails", async () => {
 		let saved = 0;
 		renameError = new Error("Status already exists: Done");
 		await renderEditor(() => {
@@ -209,7 +209,77 @@ describe("WorkflowEditor", () => {
 		await click(save());
 		await tick();
 		expect(document.querySelector('[role="alert"]')?.textContent).toContain("Status already exists: Done");
-		expect(saved).toBe(1);
+		expect(saved).toBe(0);
+		expect(names()[2]).toBe("QA");
 		expect(calls.some((call) => call[0] === "update")).toBe(false);
+	});
+
+	it("reports a partial failure through onSaved", async () => {
+		const saved: Array<{ error?: string }> = [];
+		renameError = new Error("Status already exists: Done");
+		await renderEditor((result) => {
+			saved.push(result);
+		});
+		await click(byLabel("Delete In Progress"));
+		await typeInto(nameInputs()[1] as HTMLInputElement, "QA");
+		await click(save());
+		await tick();
+		expect(calls.map((call) => call[0])).toEqual(["remove", "rename"]);
+		expect(saved).toEqual([{ error: "Status already exists: Done" }]);
+	});
+
+	it("calls the removal before the rename", async () => {
+		await renderEditor();
+		await typeInto(nameInputs()[0] as HTMLInputElement, "Backlog");
+		await click(byLabel("Delete In Progress"));
+		await click(save());
+		await tick();
+		expect(calls.map((call) => call.slice(0, 2).join(":"))).toEqual(["remove:In Progress", "rename:To Do", "update:Backlog,Review,Done"]);
+	});
+
+	it("adds new statuses first when a removal is saved", async () => {
+		await renderEditor();
+		await typeInto(byLabel("New status"), "Blocked");
+		await click(buttonByText("Add"));
+		await click(byLabel("Delete In Progress"));
+		await click(save());
+		await tick();
+		expect(calls).toEqual([
+			["update", ["To Do", "In Progress", "Review", "Done", "Blocked"], undefined],
+			["remove", "In Progress", undefined],
+			["update", ["To Do", "Review", "Blocked", "Done"], {}],
+		]);
+	});
+
+	it("keeps the row and records no removal when the delete dialog is cancelled", async () => {
+		await renderEditor();
+		await click(byLabel("Delete Review"));
+		await click(buttonByText("Cancel"));
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		expect(names()).toEqual(["To Do", "In Progress", "Review", "Done"]);
+		expect(save().disabled).toBe(true);
+	});
+
+	it("labels renamed move targets and focuses the add input after a confirmed delete", async () => {
+		await renderEditor();
+		await typeInto(nameInputs()[2] as HTMLInputElement, "QA");
+		await click(byLabel("Delete To Do"));
+		const options = Array.from(document.querySelectorAll<HTMLOptionElement>('[aria-label="Move tasks to"] option'));
+		expect(options.map((o) => [o.value, o.textContent])).toEqual([
+			["In Progress", "In Progress"],
+			["Review", "QA (Review)"],
+			["Done", "Done"],
+		]);
+		await click(buttonByText("Delete"));
+		expect(document.activeElement).toBe(byLabel("New status"));
+	});
+
+	it("disables Delete and shows the error when the usage load fails", async () => {
+		apiClient.fetchStatusUsage = async () => {
+			throw new Error("Usage failed");
+		};
+		await renderEditor();
+		expect(byLabel<HTMLButtonElement>("Delete Review").disabled).toBe(true);
+		expect(document.querySelector('[role="alert"]')?.textContent).toContain("Usage failed");
 	});
 });
