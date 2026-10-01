@@ -31,6 +31,7 @@ Homebrew and Nix install the upstream package, which does not have the fork feat
 - **Image upload, paste, and drag-drop.** Paste a screenshot or drop image files into any task editor. The server compresses each image to WebP and saves it under `backlog/assets/images/<task-id>/`. Images that you add before a task has an ID go to `_unsorted/`, and they move to the task folder when you create the task. An image that another task also links is copied, not moved.
 - **Image picker.** The image button in the editor toolbar opens a picker. Search, select, and insert existing images, or upload new ones.
 - **Workflow editor.** In Settings, add, rename, reorder, color, and delete statuses. A rename or delete rewrites the affected tasks in `tasks/`, `completed/`, and `archive/tasks/`. Status colors show on the board columns and in the task list.
+- **Clone task.** Copy a task into a new one from the task view (**Clone**), the CLI (`backlog task clone <id> [--title <title>]`), or MCP (`task_clone`). The copy keeps the content, labels, links, and checklists (unchecked), and resets the status, notes, summary, and comments.
 - **Safer local server.** The web server rejects requests from other websites and DNS rebinding.
 
 ### Configuration
