@@ -281,6 +281,7 @@ describe("McpServer bootstrap", () => {
 		expect(tools.tools.map((tool) => tool.name)).toEqual([
 			"get_backlog_instructions",
 			"task_create",
+			"task_clone",
 			"task_list",
 			"task_search",
 			"task_edit",
