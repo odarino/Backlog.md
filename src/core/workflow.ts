@@ -40,14 +40,27 @@ export function validateStatusName(name: string): string {
 	return trimmed;
 }
 
-export function validateStatusList(statuses: string[]): string[] {
-	const names = statuses.map(validateStatusName);
+/**
+ * Check a status list against the `current` one. Names already in `current` (exact spelling) are kept
+ * as they are, so an older config that today's rules reject can still be saved; new names must pass
+ * the name rules and must not repeat any other name in the list.
+ */
+export function validateStatusList(statuses: string[], current: string[] = []): string[] {
+	const existing = new Set(current);
+	const names = statuses.map((name) => (existing.has(name) ? name : validateStatusName(name)));
 	if (names.length < 2) throw new WorkflowError("A workflow needs at least 2 statuses", 400);
-	const seen = new Set<string>();
+	const spellings = new Set<string>();
+	const keys = new Map<string, string>();
 	for (const name of names) {
 		const key = statusKey(name);
-		if (seen.has(key)) throw new WorkflowError(`Duplicate status: ${name}`, 400);
-		seen.add(key);
+		const earlier = keys.get(key);
+		// Two spellings the current config already has are an older duplicate; anything else is new.
+		const olderDuplicate = earlier !== undefined && existing.has(earlier) && existing.has(name);
+		if (spellings.has(name) || (earlier !== undefined && !olderDuplicate)) {
+			throw new WorkflowError(`Duplicate status: ${name}`, 400);
+		}
+		spellings.add(name);
+		if (earlier === undefined) keys.set(key, name);
 	}
 	return names;
 }

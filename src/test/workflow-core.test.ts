@@ -151,6 +151,17 @@ describe("workflow validation", () => {
 		expect(validateStatusList(["To Do", "Done"])).toEqual(["To Do", "Done"]);
 	});
 
+	it("validateStatusList checks only the names that are new to the current list", () => {
+		const long = "a".repeat(41);
+		const current = ["To Do", long, "Done", "done"];
+		expect(validateStatusList(["done", "To Do", long, "Done"], current)).toEqual(["done", "To Do", long, "Done"]);
+		expect(validateStatusList([...current, " QA "], current)).toEqual([...current, "QA"]);
+		expectWorkflowError(() => validateStatusList([...current, "b".repeat(41)], current), 400);
+		expectWorkflowError(() => validateStatusList([...current, "DONE"], current), 400);
+		expectWorkflowError(() => validateStatusList([...current, "To Do"], current), 400);
+		expectWorkflowError(() => validateStatusList(["To Do"], current), 400);
+	});
+
 	it("validateStatusColors maps keys to canonical statuses and lowercases values", () => {
 		const statuses = ["To Do", "Review", "Done"];
 		expect(validateStatusColors({ review: "#8B5CF6" }, statuses)).toEqual({ Review: "#8b5cf6" });

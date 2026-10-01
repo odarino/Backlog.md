@@ -171,6 +171,19 @@ describe("PUT /api/config status rules", () => {
 		expect(await getConfig()).toEqual(before);
 	});
 
+	it("saves settings for an older list that today's name rules reject", async () => {
+		const long = "A status name that is longer than forty chars";
+		const config = await core.filesystem.loadConfig();
+		if (!config) throw new Error("Missing config");
+		await core.filesystem.saveConfig({ ...config, statuses: ["To Do", long, "Done", "done"] });
+		// The server may still hold the old list in its cache, so the body names the list it saw on disk.
+		expect((await putConfig({ projectName: "Older", statuses: ["To Do", long, "Done", "done"] })).status).toBe(200);
+		expect((await putConfig({ statuses: ["done", "To Do", long, "Done"] })).status).toBe(200);
+		expect((await putConfig({ statuses: ["done", "To Do", long, "Done", "DONE"] })).status).toBe(400);
+		expect((await putConfig({ statuses: ["done", "To Do", long, "Done", "x".repeat(41)] })).status).toBe(400);
+		expect(await getStatuses()).toEqual(["done", "To Do", long, "Done"]);
+	});
+
 	it("rejects a default status outside the list", async () => {
 		const before = await getConfig();
 		expect((await putConfig({ defaultStatus: "Nope" })).status).toBe(400);
