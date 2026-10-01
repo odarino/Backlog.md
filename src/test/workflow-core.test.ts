@@ -178,7 +178,7 @@ describe("workflow status changes", () => {
 	});
 
 	it("renameStatus rewrites tasks in every folder and updates the config", async () => {
-		const before = await Bun.file(fixtures.review[0] as string).text();
+		const before = await Promise.all(fixtures.review.map((path) => Bun.file(path).text()));
 		const draftBefore = await Bun.file(fixtures.draft).text();
 
 		const result = await renameStatus(core, "Review", "QA");
@@ -188,7 +188,8 @@ describe("workflow status changes", () => {
 			expect(existsSync(path)).toBe(true);
 			expect(await readStatus(path)).toBe("QA");
 		}
-		expect(await Bun.file(fixtures.review[0] as string).text()).toBe(before.replace(STATUS_LINE, "status: QA"));
+		const after = await Promise.all(fixtures.review.map((path) => Bun.file(path).text()));
+		expect(after).toEqual(before.map((text) => text.replace(STATUS_LINE, "status: QA")));
 		expect(await readStatus(fixtures.todo)).toBe("To Do");
 		expect(await Bun.file(fixtures.draft).text()).toBe(draftBefore);
 
