@@ -16,6 +16,7 @@ import {
 	renameStatus,
 	validateStatusColors,
 	validateStatusList,
+	WorkflowCommitError,
 	WorkflowError,
 	withWorkflowLock,
 } from "../core/workflow.ts";
@@ -1472,6 +1473,12 @@ export class BacklogServer {
 			if (error instanceof WorkflowError) return Response.json({ error: error.message }, { status: error.status });
 			if (error instanceof BacklogToolError) return Response.json({ error: error.message }, { status: 400 });
 			if (isTaskLockError(error)) return Response.json({ error: error.message }, { status: 409 });
+			if (error instanceof WorkflowCommitError) {
+				// The files and config changed, so clients must reload.
+				this.broadcastDataUpdated("tasks");
+				this.broadcastConfigUpdated();
+				return Response.json({ error: `Workflow changed but the commit failed: ${error.message}` }, { status: 500 });
+			}
 			console.error("Error changing workflow:", error);
 			return Response.json({ error: "Failed to change workflow" }, { status: 500 });
 		}
@@ -1733,8 +1740,8 @@ export class BacklogServer {
 				return Response.json({ error: "Statuses must be a list of names" }, { status: 400 });
 			}
 
-			// Read, check, and save under the workflow lock so a rename or remove cannot interleave.
-			const failure = await withWorkflowLock(async () => {
+			// Read, check, save, and commit under the workflow lock so a rename or remove cannot interleave.
+			return await withWorkflowLock(async (): Promise<Response> => {
 				this.core.filesystem.invalidateConfigCache();
 				const current = await this.core.filesystem.loadConfig();
 				const currentStatuses = current?.statuses ?? [];
@@ -1761,16 +1768,26 @@ export class BacklogServer {
 					updatedConfig.statusColors = validateStatusColors(updatedConfig.statusColors, statuses);
 				}
 				await this.core.filesystem.saveConfig(updatedConfig);
-				return undefined;
+				const saved = (await this.core.filesystem.loadConfig()) ?? updatedConfig;
+				this.projectName = saved.projectName;
+				if (await this.core.shouldAutoCommit()) {
+					// commitFiles skips the commit when config.yml did not change.
+					const paths = [this.core.filesystem.configFilePath];
+					try {
+						await this.core.git.addFiles(paths);
+						await this.core.git.commitFiles("Update config", paths);
+					} catch (error) {
+						try {
+							await this.core.git.resetPaths(paths);
+						} catch {
+							// Keep the commit error; it is the one the caller can act on.
+						}
+						const message = error instanceof Error ? error.message : String(error);
+						return Response.json({ error: `Config saved but the commit failed: ${message}` }, { status: 500 });
+					}
+				}
+				return Response.json(saved);
 			});
-			if (failure) return failure;
-
-			// Update local project name if changed
-			if (updatedConfig.projectName !== this.projectName) {
-				this.projectName = updatedConfig.projectName;
-			}
-
-			return Response.json(updatedConfig);
 		} catch (error) {
 			if (error instanceof WorkflowError) return Response.json({ error: error.message }, { status: error.status });
 			console.error("Error updating config:", error);
