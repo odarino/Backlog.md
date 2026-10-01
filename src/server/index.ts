@@ -251,6 +251,8 @@ export async function findNextAvailablePort(startPort: number, maxPort = MAX_POR
 export class BacklogServer {
 	private core: Core;
 	private server: Server<unknown> | null = null;
+	// Bound port kept for the request guard; it must survive `this.server = null` in stop().
+	private guardPort: number | null = null;
 	private runtimeWorkingDirectory: string | null = null;
 	private projectName = "Untitled Project";
 	private sockets = new Set<ServerWebSocket<unknown>>();
@@ -574,6 +576,7 @@ export class BacklogServer {
 
 			try {
 				this.server = Bun.serve(serveOptions as unknown as Parameters<typeof Bun.serve>[0]) as Server<unknown>;
+				this.guardPort = this.server.port ?? null;
 			} catch (error) {
 				this.restoreRuntimeWorkingDirectory();
 				throw error;
@@ -787,9 +790,7 @@ export class BacklogServer {
 	}
 
 	private guard(req: Request): Response | null {
-		const port = this.server?.port;
-		// Before Bun.serve returns there is no bound port; no request can arrive yet.
-		return port === undefined ? null : checkRequest(req, port);
+		return checkRequest(req, this.guardPort);
 	}
 
 	// Wrap every per-method route handler so the request guard runs first.

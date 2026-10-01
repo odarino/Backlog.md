@@ -9,6 +9,29 @@ let server: BacklogServer | null = null;
 let serverPort = 0;
 
 const call = (path: string, init?: RequestInit) => fetch(`http://127.0.0.1:${serverPort}${path}`, init);
+// Bun's fetch overrides the Host header, so send a raw HTTP request over a socket.
+const rawGet = (path: string, host: string) =>
+	new Promise<string>((resolve, reject) => {
+		let data = "";
+		const socket = connect(serverPort, "127.0.0.1", () => {
+			socket.write(`GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+		});
+		socket.setTimeout(3000, () => {
+			socket.destroy();
+			reject(new Error("raw socket timed out"));
+		});
+		socket.on("data", (chunk) => {
+			data += chunk.toString();
+		});
+		socket.on("end", () => {
+			socket.destroy();
+			resolve(data);
+		});
+		socket.on("error", (error) => {
+			socket.destroy();
+			reject(error);
+		});
+	});
 const evil = { Origin: "https://evil.example", "Content-Type": "application/json" };
 
 beforeEach(async () => {
@@ -72,20 +95,26 @@ describe("web server request guard", () => {
 	});
 
 	it("rejects an unknown Host with 421", async () => {
-		// Bun's fetch overrides the Host header, so send a raw HTTP request over a socket.
-		const raw = await new Promise<string>((resolve, reject) => {
-			let data = "";
-			const socket = connect(serverPort, "127.0.0.1", () => {
-				socket.write("GET /api/tasks HTTP/1.1\r\nHost: evil.example\r\nConnection: close\r\n\r\n");
-			});
-			socket.on("data", (chunk) => {
-				data += chunk.toString();
-			});
-			socket.on("end", () => resolve(data));
-			socket.on("error", reject);
-		});
+		const raw = await rawGet("/api/tasks", "evil.example");
 		expect(Number(raw.split(" ")[1])).toBe(421);
 		expect(JSON.parse(raw.slice(raw.indexOf("\r\n\r\n") + 4))).toEqual({ error: "Host not allowed" });
+	});
+
+	it("rejects an unknown Host on an unrouted path (fetch fallback)", async () => {
+		const raw = await rawGet("/no-such-path", "evil.example");
+		expect(Number(raw.split(" ")[1])).toBe(421);
+	});
+
+	it("rejects a cross-origin delete and keeps the task", async () => {
+		const created = await call("/api/tasks", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ title: "Keep me" }),
+		});
+		const { id } = await created.json();
+		const res = await call(`/api/tasks/${id}`, { method: "DELETE", headers: { Origin: "https://evil.example" } });
+		expect(res.status).toBe(403);
+		expect((await call(`/api/tasks/${id}`)).status).toBe(200);
 	});
 
 	it("still serves the SPA and assets for a good Host", async () => {
