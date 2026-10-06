@@ -22,7 +22,13 @@ import { registerMcpCommand } from "./commands/mcp.ts";
 import { pickTaskForEditWizard, runTaskCreateWizard, runTaskEditWizard } from "./commands/task-wizard.ts";
 import { watchJson } from "./commands/watch-json.ts";
 import { DEFAULT_DIRECTORIES, DEFAULT_FILES, DEFAULT_STATUSES } from "./constants/index.ts";
-import { type DuplicateRepairPlan, findLocalDuplicateTaskIds } from "./core/duplicate-task-repair.ts";
+import {
+	commitDuplicateTaskIdRepair,
+	type DuplicateRepairChange,
+	type DuplicateRepairPlan,
+	findLocalDuplicateTaskIds,
+	getDuplicateRepairCommitOptions,
+} from "./core/duplicate-task-repair.ts";
 import { initializeProject } from "./core/init.ts";
 import { buildMilestoneBuckets, collectArchivedMilestoneKeys, milestoneKey } from "./core/milestones.ts";
 import { loadTaskDetail, loadTaskListItems } from "./core/task-detail.ts";
@@ -5562,27 +5568,103 @@ addHelpSchema(configCmd.command("list"), {
 			reportCommandFailure("Failed to list config values", err);
 		}
 	});
+/**
+ * Offers to commit (and push) the files a duplicate repair renamed, so teammates get the repair.
+ * Flags decide without prompting; otherwise an interactive terminal asks, and a script without flags skips it.
+ */
+async function commitRepairAfterFix(
+	core: Core,
+	changes: DuplicateRepairChange[],
+	options: { yes?: boolean; commit?: boolean; push?: boolean; message?: string },
+): Promise<void> {
+	if (changes.length === 0) return;
+	const commitOptions = await getDuplicateRepairCommitOptions(core, changes);
+	const flagged = Boolean(options.commit || options.push || options.message !== undefined);
+	if (!commitOptions.repository) {
+		if (flagged) {
+			console.error("Not a Git repository; nothing was committed.");
+			process.exitCode = 1;
+		}
+		return;
+	}
+
+	let message = options.message ?? commitOptions.message;
+	let push = Boolean(options.push);
+	if (!flagged) {
+		if (options.yes || !hasInteractiveTTY) {
+			console.log("The renamed task files are not committed. Use --commit or --push with --fix to commit them.");
+			return;
+		}
+		const shouldCommit = await clack.confirm({ message: "Commit the renamed task files?", initialValue: true });
+		if (clack.isCancel(shouldCommit) || !shouldCommit) return;
+		const enteredMessage = await clack.text({
+			message: "Commit message",
+			initialValue: commitOptions.message,
+			validate: (value) => (value?.trim() ? undefined : "Enter a commit message."),
+		});
+		if (clack.isCancel(enteredMessage)) return;
+		message = enteredMessage;
+		if (commitOptions.upstream) {
+			const shouldPush = await clack.confirm({ message: `Push to ${commitOptions.upstream}?`, initialValue: true });
+			push = !clack.isCancel(shouldPush) && shouldPush === true;
+		}
+	}
+
+	const result = await commitDuplicateTaskIdRepair(core, changes, message, push);
+	if (!result.commit) {
+		console.log("Nothing to commit: the renamed task files match the last commit.");
+		return;
+	}
+	console.log(`Committed ${result.commit.slice(0, 7)}.`);
+	if (result.pushedTo) {
+		console.log(`Pushed to ${result.pushedTo}${result.pulled ? " after pulling remote changes" : ""}.`);
+	} else if (result.pushError) {
+		console.error(`Push failed. The commit stays local.\n${result.pushError}`);
+		process.exitCode = 1;
+	}
+}
+
 addHelpSchema(program.command("doctor"), {
 	reads: "Active and completed task files, document, decision, and draft files, plus Backlog Markdown references",
 	required: [],
 	optional: [
 		{ name: "fix", type: "Boolean", description: "Apply the displayed duplicate-ID repair" },
 		{ name: "yes", type: "Boolean", description: "Confirm --fix without an interactive prompt" },
+		{ name: "commit", type: "Boolean", description: "After --fix, commit only the renamed task files" },
+		{
+			name: "push",
+			type: "Boolean",
+			description: "After --fix, commit and push to the current branch's upstream; pulls once if the remote is ahead",
+		},
+		{ name: "message", type: "String", description: "Commit message for --commit or --push" },
 	],
 	writes:
-		"With --fix, atomically renames duplicate task files and updates only their frontmatter IDs; ambiguous references are reported for human review",
+		"With --fix, atomically renames duplicate task files and updates only their frontmatter IDs; ambiguous references are reported for human review. With --commit or --push (or after the interactive prompt), commits only the renamed files and pushes to the existing upstream",
 	output:
 		"Duplicate-ID diagnosis for tasks, documents, decisions, and drafts, a deterministic task repair preview, a reference-review report, and a report of self-referential and cyclic task dependencies",
-	examples: ["backlog doctor", "backlog doctor --fix", "backlog doctor --fix --yes"],
+	examples: [
+		"backlog doctor",
+		"backlog doctor --fix",
+		"backlog doctor --fix --yes",
+		'backlog doctor --fix --yes --push --message "Repair duplicate task IDs"',
+	],
 })
 	.description(
 		"diagnose duplicate task, document, and decision IDs, report self-referential and cyclic dependencies, and safely repair duplicate task IDs",
 	)
 	.option("--fix", "apply the displayed duplicate task ID repair")
 	.option("--yes", "confirm --fix without prompting")
-	.action(async (options: { fix?: boolean; yes?: boolean }) => {
+	.option("--commit", "commit the renamed task files after --fix")
+	.option("--push", "commit and push the renamed task files to the upstream after --fix")
+	.option("--message <text>", "commit message for --commit or --push")
+	.action(async (options: { fix?: boolean; yes?: boolean; commit?: boolean; push?: boolean; message?: string }) => {
 		if (options.yes && !options.fix) {
 			console.error("--yes can only be used together with --fix.");
+			process.exitCode = 1;
+			return;
+		}
+		if ((options.commit || options.push || options.message !== undefined) && !options.fix) {
+			console.error("--commit, --push, and --message can only be used together with --fix.");
 			process.exitCode = 1;
 			return;
 		}
@@ -5681,6 +5763,7 @@ addHelpSchema(program.command("doctor"), {
 				);
 			}
 			console.log("Verification passed: no duplicate active/completed task IDs remain.");
+			await commitRepairAfterFix(core, result.changes, options);
 			if (plan.crossBranchFindings.length > 0) {
 				console.log("Cross-branch findings remain diagnostic-only and still require branch-by-branch review.");
 				process.exitCode = 1;

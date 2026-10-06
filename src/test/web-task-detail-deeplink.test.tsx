@@ -95,6 +95,8 @@ const emptyDuplicatePlan = (): DuplicateRepairPlan => ({
 	fingerprint: "empty",
 });
 let controlledTimerCleanup: (() => void) | null = null;
+// Extra fields for /api/tasks/duplicates responses, e.g. the commit options a repair returns.
+let duplicatesResponseExtra: Record<string, unknown> = {};
 const historyWaitCleanups = new Set<() => void>();
 
 type FetchSettlePoint = "body" | "response";
@@ -391,7 +393,7 @@ const resolveMockResponse = async (url: URL): Promise<Response> => {
 			return json([]);
 		}
 		if (url.pathname === "/api/tasks/duplicates") {
-			return json(emptyDuplicatePlan());
+			return json({ ...emptyDuplicatePlan(), ...duplicatesResponseExtra });
 		}
 		if (url.pathname === "/api/version") {
 			return json({ version: "test" });
@@ -1401,17 +1403,26 @@ describe("task detail routes", () => {
 		expect(dialog?.textContent).toContain("found 1 duplicate ID group");
 
 		await click(findButton(dialog as HTMLElement, "Continue") as HTMLButtonElement);
-		await click(findButton(dialog as HTMLElement, "Repair 1 file") as HTMLButtonElement, [
-			expectFetch("repair", "/api/tasks/duplicates"),
-			expectFetch("refreshed search", "/api/search"),
-			expectFetch("refreshed duplicate plan", "/api/tasks/duplicates"),
-		]);
-		assertState(
-			() =>
-				container.ownerDocument.querySelector("[role='dialog']") === null &&
-				container.querySelector("[role='alert']") === null,
-			"repair closes the dialog and the ambiguous link alert",
-		);
+		duplicatesResponseExtra = {
+			changes: [{ sourcePath: "backlog/tasks/back-1 - Duplicate.md", targetPath: "backlog/tasks/back-102 - Duplicate.md" }],
+			commit: { repository: true, upstream: null, message: "Repair duplicate task IDs" },
+		};
+		try {
+			await click(findButton(dialog as HTMLElement, "Repair 1 file") as HTMLButtonElement, [
+				expectFetch("repair", "/api/tasks/duplicates"),
+				expectFetch("refreshed search", "/api/search"),
+				expectFetch("refreshed duplicate plan", "/api/tasks/duplicates"),
+			]);
+		} finally {
+			duplicatesResponseExtra = {};
+		}
+		// The repair empties the live plan, but the dialog keeps its snapshot and moves to the commit step.
+		const commitDialog = container.ownerDocument.querySelector("[role='dialog']");
+		expect(commitDialog?.textContent).toContain("Commit message");
+		expect(container.querySelector("[role='alert']")).toBeNull();
+
+		await click(findButton(commitDialog as HTMLElement, "Not now") as HTMLButtonElement);
+		expect(container.ownerDocument.querySelector("[role='dialog']")).toBeNull();
 	});
 
 	it("names backlog doctor when an ambiguous link has no local duplicate groups", async () => {

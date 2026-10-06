@@ -305,7 +305,8 @@ function AppContent() {
   const routeNavigationState = getTaskRouteNavigationState(location.state);
   const taskRouteError = routeNavigationState.taskRouteError;
   const taskRouteAmbiguous = routeNavigationState.taskRouteAmbiguous === true;
-  const [isDuplicateRepairOpen, setIsDuplicateRepairOpen] = useState(false);
+  // The dialog keeps the plan it opened with: a repair empties the live plan while the commit step is still showing.
+  const [repairDialogPlan, setRepairDialogPlan] = useState<DuplicateRepairPlan | null>(null);
 
   // Set version data attribute on body
   React.useEffect(() => {
@@ -1014,6 +1015,7 @@ function AppContent() {
                 error={loadError}
                 onRefreshData={refreshData}
                 duplicateRepairPlan={duplicateRepairPlan}
+                onReviewDuplicateRepair={() => setRepairDialogPlan(duplicateRepairPlan)}
               />
             }
           >
@@ -1091,7 +1093,7 @@ function AppContent() {
               <button
                 type="button"
                 className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-500 dark:text-red-950 dark:hover:bg-red-400"
-                onClick={() => setIsDuplicateRepairOpen(true)}
+                onClick={() => setRepairDialogPlan(duplicateRepairPlan)}
               >
                 Review repair
               </button>
@@ -1107,14 +1109,14 @@ function AppContent() {
         </div>
       )}
 
-      {duplicateRepairPlan && duplicateRepairPlan.groups.length > 0 && (
+      {repairDialogPlan && (
         <DuplicateIdRepairModal
-          isOpen={isDuplicateRepairOpen}
-          plan={duplicateRepairPlan}
-          onClose={() => setIsDuplicateRepairOpen(false)}
+          isOpen
+          plan={repairDialogPlan}
+          onClose={() => setRepairDialogPlan(null)}
           onRepaired={async () => {
             await refreshData();
-            dismissTaskRouteError();
+            if (taskRouteAmbiguous) dismissTaskRouteError();
           }}
         />
       )}

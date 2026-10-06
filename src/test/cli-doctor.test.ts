@@ -168,6 +168,58 @@ describe("backlog doctor", () => {
 		},
 	);
 
+	it("requires --fix for --commit, --push, and --message", async () => {
+		const result = await $`bun ${cliPath} doctor --push`.cwd(testDir).quiet().nothrow();
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr.toString()).toContain("--commit, --push, and --message can only be used together with --fix");
+	});
+
+	describe("committing the repair", () => {
+		// The test directory sits inside this project's repository, so it needs a repository of its own.
+		beforeEach(async () => {
+			await $`git init -q -b main`.cwd(testDir).quiet();
+			await $`git config user.email test@example.com`.cwd(testDir).quiet();
+			await $`git config user.name Test`.cwd(testDir).quiet();
+			await $`git config commit.gpgsign false`.cwd(testDir).quiet();
+			await $`git add -A`.cwd(testDir).quiet();
+			await $`git commit -q -m initial`.cwd(testDir).quiet();
+		});
+
+		it("commits only the renamed task files with --commit and --message", async () => {
+			const result = await $`bun ${cliPath} doctor --fix --yes --commit --message ${"Fix duplicate IDs"}`
+				.cwd(testDir)
+				.quiet()
+				.nothrow();
+			expect(`${result.stdout}${result.stderr}`).toContain("Committed ");
+			expect(result.exitCode).toBe(0);
+			expect((await $`git log -1 --format=%s`.cwd(testDir).text()).trim()).toBe("Fix duplicate IDs");
+			const committed = (await $`git show --no-renames --name-only --format= HEAD`.cwd(testDir).text()).trim();
+			expect(committed.split("\n").sort()).toEqual([
+				"backlog/completed/task-001 - Gamma.md",
+				"backlog/completed/task-3 - Gamma.md",
+				"backlog/tasks/task-01 - Beta.md",
+				"backlog/tasks/task-2 - Beta.md",
+			]);
+			expect((await $`git status --porcelain -- backlog/tasks backlog/completed`.cwd(testDir).text()).trim()).toBe("");
+		});
+
+		it("keeps the commit and exits non-zero when --push has no upstream", async () => {
+			const result = await $`bun ${cliPath} doctor --fix --yes --push`.cwd(testDir).quiet().nothrow();
+			expect(result.exitCode).toBe(1);
+			expect(result.stdout.toString()).toContain("Committed ");
+			expect(result.stderr.toString()).toContain("Push failed. The commit stays local.");
+			expect(result.stderr.toString()).toContain("The current branch has no upstream.");
+			expect(await $`git log -1 --format=%B`.cwd(testDir).text()).toContain("Repair duplicate task IDs");
+		});
+
+		it("does not commit after --fix --yes without commit flags", async () => {
+			const result = await $`bun ${cliPath} doctor --fix --yes`.cwd(testDir).quiet().nothrow();
+			expect(result.exitCode).toBe(0);
+			expect((await $`git log -1 --format=%s`.cwd(testDir).text()).trim()).toBe("initial");
+			expect(result.stdout.toString()).toContain("The renamed task files are not committed.");
+		});
+	});
+
 	it("requires --fix when --yes is supplied", async () => {
 		const result = await $`bun ${cliPath} doctor --yes`.cwd(testDir).quiet().nothrow();
 		expect(result.exitCode).toBe(1);
