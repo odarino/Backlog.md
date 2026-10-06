@@ -1345,6 +1345,90 @@ describe("task detail routes", () => {
 		expect(container.ownerDocument.activeElement).toBe(alert);
 	});
 
+	const renderAmbiguousLink = async (plan: DuplicateRepairPlan): Promise<HTMLElement> => {
+		const initialLoadRef: { current?: FetchOperation } = {};
+		const container = await renderApp("/tasks/BACK-1/collision-shadow", {
+			manualDuplicatePlan: true,
+			operationRef: initialLoadRef,
+		});
+		const initialLoad = initialLoadRef.current;
+		if (!initialLoad) throw new Error("Initial data-load operation was not captured");
+		await act(async () => {
+			initialLoad.respond("initial duplicate plan", json(plan));
+			await initialLoad.settle("initial duplicate plan");
+		});
+		assertState(() => Boolean(container.querySelector("[role='alert']")), "ambiguous link alert");
+		return container;
+	};
+
+	const findButton = (root: ParentNode, label: string) =>
+		Array.from(root.querySelectorAll("button")).find((button) => button.textContent?.trim() === label);
+
+	it("offers the duplicate repair dialog from an ambiguous link alert", async () => {
+		const container = await renderAmbiguousLink({
+			...emptyDuplicatePlan(),
+			groups: [
+				{
+					id: "BACK-1",
+					tasks: [
+						{ ...tasks[0], id: "BACK-1", filePath: "backlog/tasks/back-1 - Alpha.md" } as Task,
+						{ ...tasks[0], id: "BACK-1", title: "Duplicate", filePath: "backlog/tasks/back-1 - Duplicate.md" } as Task,
+					],
+				},
+			],
+			changes: [
+				{
+					sourcePath: "backlog/tasks/back-1 - Duplicate.md",
+					targetPath: "backlog/tasks/back-102 - Duplicate.md",
+					oldId: "BACK-1",
+					newId: "BACK-102",
+					title: "Duplicate",
+					location: "active",
+					sourceHash: "abc",
+				},
+			],
+			repairable: true,
+			fingerprint: "ambiguous-link-plan",
+		});
+		const alert = container.querySelector("[role='alert']") as HTMLElement;
+		expect(alert.textContent).not.toContain("backlog doctor");
+		const reviewButton = findButton(alert, "Review repair");
+		expect(reviewButton).toBeTruthy();
+
+		await click(reviewButton as HTMLButtonElement);
+		const dialog = container.ownerDocument.querySelector("[role='dialog']");
+		expect(dialog?.textContent).toContain("Repair duplicate task IDs");
+		expect(dialog?.textContent).toContain("found 1 duplicate ID group");
+
+		await click(findButton(dialog as HTMLElement, "Continue") as HTMLButtonElement);
+		await click(findButton(dialog as HTMLElement, "Repair 1 file") as HTMLButtonElement, [
+			expectFetch("repair", "/api/tasks/duplicates"),
+			expectFetch("refreshed search", "/api/search"),
+			expectFetch("refreshed duplicate plan", "/api/tasks/duplicates"),
+		]);
+		assertState(
+			() =>
+				container.ownerDocument.querySelector("[role='dialog']") === null &&
+				container.querySelector("[role='alert']") === null,
+			"repair closes the dialog and the ambiguous link alert",
+		);
+	});
+
+	it("names backlog doctor when an ambiguous link has no local duplicate groups", async () => {
+		const container = await renderAmbiguousLink(emptyDuplicatePlan());
+		const alert = container.querySelector("[role='alert']") as HTMLElement;
+		expect(alert.textContent).toContain("Run backlog doctor to find the duplicates.");
+		expect(findButton(alert, "Review repair")).toBeUndefined();
+	});
+
+	it("keeps the missing-task alert free of duplicate repair guidance", async () => {
+		const container = await renderApp("/tasks/BACK-999/missing");
+		const alert = container.querySelector("[role='alert']") as HTMLElement;
+		expect(alert.textContent).toContain('Task "BACK-999" was not found.');
+		expect(alert.textContent).not.toContain("backlog doctor");
+		expect(findButton(alert, "Review repair")).toBeUndefined();
+	});
+
 	it("keeps an explicit task prefix when equal numeric IDs would be ambiguous", async () => {
 		const container = await renderApp("/tasks");
 		assertState(() => container.textContent?.includes("Jira task") ?? false, "cross-prefix task list");
