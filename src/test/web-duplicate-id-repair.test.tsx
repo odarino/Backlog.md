@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { JSDOM } from "jsdom";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { DuplicateRepairPlan } from "../core/duplicate-task-repair.ts";
 import type { Task } from "../types/index.ts";
+import { DuplicateIdRepairModal } from "../web/components/DuplicateIdRepairModal.tsx";
 import { DuplicateIdWarning } from "../web/components/DuplicateIdWarning.tsx";
 
 let activeRoot: Root | null = null;
@@ -61,6 +62,19 @@ function makePlan(overrides: Partial<DuplicateRepairPlan> = {}): DuplicateRepair
 	};
 }
 
+// Mirrors App: the banner opens one dialog that keeps the plan it opened with.
+function RepairHarness({ plan, onRepaired }: { plan: DuplicateRepairPlan; onRepaired: () => Promise<void> }) {
+	const [openPlan, setOpenPlan] = useState<DuplicateRepairPlan | null>(null);
+	return (
+		<>
+			<DuplicateIdWarning plan={plan} onReview={() => setOpenPlan(plan)} />
+			{openPlan && (
+				<DuplicateIdRepairModal isOpen plan={openPlan} onClose={() => setOpenPlan(null)} onRepaired={onRepaired} />
+			)}
+		</>
+	);
+}
+
 function renderWarning(plan = makePlan(), onRepaired = async () => {}): HTMLElement {
 	const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost" });
 	(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -70,7 +84,7 @@ function renderWarning(plan = makePlan(), onRepaired = async () => {}): HTMLElem
 	const container = document.getElementById("root") as HTMLElement;
 	activeRoot = createRoot(container);
 	act(() => {
-		activeRoot?.render(<DuplicateIdWarning plan={plan} onRepaired={onRepaired} />);
+		activeRoot?.render(<RepairHarness plan={plan} onRepaired={onRepaired} />);
 	});
 	return container;
 }
@@ -221,5 +235,115 @@ describe("DuplicateIdWarning", () => {
 		expect(renameRow?.querySelector("span")?.className).toContain("break-all");
 		const actionRow = buttonWithText(container, "Cancel").parentElement;
 		expect(actionRow?.className).toContain("flex-wrap");
+	});
+});
+
+describe("DuplicateIdRepairModal commit step", () => {
+	type CommitResponse = { commit: string | null; pushedTo: string | null; pulled: boolean; pushError?: string };
+
+	function mockRepairApi(commitOptions: unknown, commitResponse: CommitResponse) {
+		const commitBodies: Array<{ changes: unknown[]; message: string; push: boolean }> = [];
+		globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+			const url = String(input);
+			if (url.endsWith("/tasks/duplicates/commit")) {
+				commitBodies.push(JSON.parse(String(init?.body)));
+				return Response.json(commitResponse);
+			}
+			const plan = makePlan();
+			return Response.json({
+				repairedFiles: 1,
+				changes: plan.changes,
+				references: [],
+				remainingGroups: [],
+				commit: commitOptions,
+			});
+		}) as typeof fetch;
+		return commitBodies;
+	}
+
+	async function repairThroughDialog(onRepaired = async () => {}): Promise<HTMLElement> {
+		const container = renderWarning(makePlan(), onRepaired);
+		await click(buttonWithText(container, "Review repair"));
+		await click(buttonWithText(container, "Continue"));
+		await click(buttonWithText(container, "Repair 1 file"));
+		return container;
+	}
+
+	it("commits and pushes the renamed files with the edited message", async () => {
+		const commitBodies = mockRepairApi(
+			{ repository: true, upstream: "origin/main", message: "Repair duplicate task IDs\n\nTASK-01 -> TASK-2 (Beta)" },
+			{ commit: "abcdef1234567", pushedTo: "origin/main", pulled: true },
+		);
+		let refreshes = 0;
+		const container = await repairThroughDialog(async () => {
+			refreshes += 1;
+		});
+
+		expect(container.textContent).toContain("Commit repair");
+		const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+		expect(textarea.value).toBe("Repair duplicate task IDs\n\nTASK-01 -> TASK-2 (Beta)");
+		await click(buttonWithText(container, "Commit and push to origin/main"));
+
+		expect(commitBodies).toEqual([
+			{
+				changes: [{ sourcePath: "backlog/tasks/task-01 - Beta.md", targetPath: "backlog/tasks/task-2 - Beta.md" }],
+				message: "Repair duplicate task IDs\n\nTASK-01 -> TASK-2 (Beta)",
+				push: true,
+			},
+		]);
+		expect(container.textContent).toContain(
+			"Committed abcdef1 and pushed to origin/main after pulling remote changes.",
+		);
+		expect(refreshes).toBe(2);
+		await click(buttonWithText(container, "Close"));
+		expect(container.querySelector('[role="dialog"]')).toBeNull();
+	});
+
+	it("offers only a local commit without an upstream", async () => {
+		const commitBodies = mockRepairApi(
+			{ repository: true, upstream: null, message: "Repair duplicate task IDs" },
+			{ commit: "1234567890", pushedTo: null, pulled: false },
+		);
+		const container = await repairThroughDialog();
+
+		expect(container.textContent).not.toContain("Commit and push");
+		await click(buttonWithText(container, "Commit"));
+		expect(commitBodies[0]?.push).toBe(false);
+		expect(container.textContent).toContain("Committed 1234567.");
+	});
+
+	it("keeps the commit local and shows the push error", async () => {
+		mockRepairApi(
+			{ repository: true, upstream: "origin/main", message: "Repair duplicate task IDs" },
+			{ commit: "1234567890", pushedTo: null, pulled: false, pushError: "remote rejected: protected branch" },
+		);
+		const container = await repairThroughDialog();
+		await click(buttonWithText(container, "Commit and push to origin/main"));
+
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+			"Push failed. The commit stays local.",
+		);
+		expect(container.textContent).toContain("remote rejected: protected branch");
+	});
+
+	it("closes without a commit step outside a Git repository, and Not now skips the commit", async () => {
+		mockRepairApi({ repository: false, upstream: null, message: "Repair duplicate task IDs" }, {
+			commit: null,
+			pushedTo: null,
+			pulled: false,
+		});
+		const outside = await repairThroughDialog();
+		expect(outside.querySelector('[role="dialog"]')).toBeNull();
+		act(() => activeRoot?.unmount());
+		activeRoot = null;
+
+		const commitBodies = mockRepairApi(
+			{ repository: true, upstream: "origin/main", message: "Repair duplicate task IDs" },
+			{ commit: "1234567890", pushedTo: null, pulled: false },
+		);
+		const inside = await repairThroughDialog();
+		await click(buttonWithText(inside, "Not now"));
+		expect(inside.querySelector('[role="dialog"]')).toBeNull();
+		expect(commitBodies).toHaveLength(0);
 	});
 });

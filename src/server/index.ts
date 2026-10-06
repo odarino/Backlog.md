@@ -5,6 +5,7 @@ import { DEFAULT_STATUSES } from "../constants/index.ts";
 import { AssetError, claimUnsortedAssets, listAssets, MAX_ASSET_BYTES, saveAsset } from "../core/assets.ts";
 import { Core, TaskArchiveStatusError } from "../core/backlog.ts";
 import type { ContentStore } from "../core/content-store.ts";
+import { commitDuplicateTaskIdRepair, getDuplicateRepairCommitOptions } from "../core/duplicate-task-repair.ts";
 import { compressOptionsFromConfig } from "../core/image-compress.ts";
 import { initializeProject } from "../core/init.ts";
 import type { SearchService } from "../core/search-service.ts";
@@ -524,6 +525,9 @@ export class BacklogServer {
 					"/api/tasks/duplicates": {
 						GET: async () => await this.handleGetDuplicateTasks(),
 						POST: async (req: Request) => await this.handleRepairDuplicateTasks(req),
+					},
+					"/api/tasks/duplicates/commit": {
+						POST: async (req: Request) => await this.handleCommitDuplicateRepair(req),
 					},
 					"/api/tasks/cleanup/execute": {
 						POST: async (req: Request) => await this.handleCleanupExecute(req),
@@ -2144,11 +2148,28 @@ export class BacklogServer {
 				return Response.json({ error: "A repair preview fingerprint is required." }, { status: 400 });
 			}
 			const result = await this.core.repairDuplicateTaskIds(fingerprint);
-			return Response.json(result);
+			return Response.json({ ...result, commit: await getDuplicateRepairCommitOptions(this.core, result.changes) });
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			const status = message.includes("changed after the preview") ? 409 : 400;
 			return Response.json({ error: message }, { status });
+		}
+	}
+
+	private async handleCommitDuplicateRepair(req: Request): Promise<Response> {
+		try {
+			const body = (await req.json()) as { changes?: unknown; message?: unknown; push?: unknown };
+			const changes = Array.isArray(body.changes)
+				? body.changes.filter(
+						(change): change is { sourcePath: string; targetPath: string } =>
+							typeof change?.sourcePath === "string" && typeof change?.targetPath === "string",
+					)
+				: [];
+			const message = typeof body.message === "string" ? body.message : "";
+			const result = await commitDuplicateTaskIdRepair(this.core, changes, message, body.push === true);
+			return Response.json(result);
+		} catch (error) {
+			return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
 		}
 	}
 

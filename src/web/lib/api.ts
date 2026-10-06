@@ -1,4 +1,10 @@
-import type { DuplicateRepairPlan, DuplicateRepairResult } from "../../core/duplicate-task-repair.ts";
+import type {
+	DuplicateRepairChange,
+	DuplicateRepairCommitOptions,
+	DuplicateRepairCommitResult,
+	DuplicateRepairPlan,
+	DuplicateRepairResult,
+} from "../../core/duplicate-task-repair.ts";
 import type { TaskStatistics } from "../../core/statistics.ts";
 import type { TaskDetail } from "../../core/task-detail.ts";
 import type {
@@ -416,10 +422,30 @@ export class ApiClient {
 		return await this.fetchJson<DuplicateRepairPlan>(`${API_BASE}/tasks/duplicates`);
 	}
 
-	async repairDuplicateTaskIds(fingerprint: string): Promise<DuplicateRepairResult> {
-		return await this.fetchJson<DuplicateRepairResult>(`${API_BASE}/tasks/duplicates`, {
+	async repairDuplicateTaskIds(
+		fingerprint: string,
+	): Promise<DuplicateRepairResult & { commit?: DuplicateRepairCommitOptions }> {
+		return await this.fetchJson<DuplicateRepairResult & { commit?: DuplicateRepairCommitOptions }>(
+			`${API_BASE}/tasks/duplicates`,
+			{
+				method: "POST",
+				body: JSON.stringify({ fingerprint }),
+			},
+		);
+	}
+
+	async commitDuplicateRepair(
+		changes: readonly DuplicateRepairChange[],
+		message: string,
+		push: boolean,
+	): Promise<DuplicateRepairCommitResult> {
+		return await this.fetchJson<DuplicateRepairCommitResult>(`${API_BASE}/tasks/duplicates/commit`, {
 			method: "POST",
-			body: JSON.stringify({ fingerprint }),
+			body: JSON.stringify({
+				changes: changes.map(({ sourcePath, targetPath }) => ({ sourcePath, targetPath })),
+				message,
+				push,
+			}),
 		});
 	}
 

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { DuplicateRepairPlan } from "../../core/duplicate-task-repair";
+import type {
+	DuplicateRepairChange,
+	DuplicateRepairCommitOptions,
+	DuplicateRepairCommitResult,
+	DuplicateRepairPlan,
+} from "../../core/duplicate-task-repair";
 import { apiClient } from "../lib/api";
 import Modal from "./Modal";
 
@@ -14,6 +19,10 @@ export function DuplicateIdRepairModal({ isOpen, plan, onClose, onRepaired }: Du
 	const [showConfirmation, setShowConfirmation] = useState(false);
 	const [isRepairing, setIsRepairing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [repaired, setRepaired] = useState<{
+		changes: DuplicateRepairChange[];
+		commit: DuplicateRepairCommitOptions;
+	} | null>(null);
 	const cancelButtonRef = useRef<HTMLButtonElement>(null);
 	const repairButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -25,6 +34,7 @@ export function DuplicateIdRepairModal({ isOpen, plan, onClose, onRepaired }: Du
 		if (isRepairing) return;
 		setShowConfirmation(false);
 		setError(null);
+		setRepaired(null);
 		onClose();
 	};
 
@@ -32,15 +42,33 @@ export function DuplicateIdRepairModal({ isOpen, plan, onClose, onRepaired }: Du
 		setIsRepairing(true);
 		setError(null);
 		try {
-			await apiClient.repairDuplicateTaskIds(plan.fingerprint);
+			const result = await apiClient.repairDuplicateTaskIds(plan.fingerprint);
 			await onRepaired();
-			handleClose();
+			// Offer to commit only what Git can take; without a repository the repair is the whole job.
+			if (result.commit?.repository && result.changes.length > 0) {
+				setRepaired({ changes: result.changes, commit: result.commit });
+			} else {
+				handleClose();
+			}
 		} catch (repairError) {
 			setError(repairError instanceof Error ? repairError.message : "Duplicate task ID repair failed.");
 		} finally {
 			setIsRepairing(false);
 		}
 	};
+
+	if (repaired) {
+		return (
+			<Modal isOpen={isOpen} onClose={handleClose} title="Commit repair" maxWidthClass="max-w-2xl">
+				<RepairCommitStep
+					changes={repaired.changes}
+					options={repaired.commit}
+					onCommitted={onRepaired}
+					onClose={handleClose}
+				/>
+			</Modal>
+		);
+	}
 
 	return (
 		<Modal
@@ -160,5 +188,113 @@ export function DuplicateIdRepairModal({ isOpen, plan, onClose, onRepaired }: Du
 				</div>
 			</div>
 		</Modal>
+	);
+}
+
+interface RepairCommitStepProps {
+	changes: DuplicateRepairChange[];
+	options: DuplicateRepairCommitOptions;
+	onCommitted: () => Promise<void>;
+	onClose: () => void;
+}
+
+function RepairCommitStep({ changes, options, onCommitted, onClose }: RepairCommitStepProps) {
+	const [message, setMessage] = useState(options.message);
+	const [pending, setPending] = useState<"commit" | "push" | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [result, setResult] = useState<DuplicateRepairCommitResult | null>(null);
+
+	const commit = async (push: boolean) => {
+		setPending(push ? "push" : "commit");
+		setError(null);
+		try {
+			const outcome = await apiClient.commitDuplicateRepair(changes, message, push);
+			setResult(outcome);
+			// A pull before the push can bring in other task files.
+			await onCommitted();
+		} catch (commitError) {
+			setError(commitError instanceof Error ? commitError.message : "Commit failed.");
+		} finally {
+			setPending(null);
+		}
+	};
+
+	const shortCommit = result?.commit?.slice(0, 7);
+	const buttonClass =
+		"rounded-md px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 disabled:opacity-50";
+
+	return (
+		<div className="space-y-5">
+			{result ? (
+				<p className="text-sm text-gray-700 dark:text-gray-300">
+					{!result.commit
+						? "Nothing to commit. The repaired files match the last commit."
+						: result.pushedTo
+							? `Committed ${shortCommit} and pushed to ${result.pushedTo}${result.pulled ? " after pulling remote changes" : ""}.`
+							: `Committed ${shortCommit}.`}
+				</p>
+			) : (
+				<div>
+					<label htmlFor="repair-commit-message" className="mb-2 block text-sm font-semibold text-gray-900 dark:text-gray-100">
+						Commit message
+					</label>
+					<textarea
+						id="repair-commit-message"
+						value={message}
+						onChange={(event) => setMessage(event.target.value)}
+						rows={Math.min(8, message.split("\n").length + 1)}
+						disabled={pending !== null}
+						className="w-full rounded-md border border-gray-300 bg-white p-3 font-mono text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+					/>
+				</div>
+			)}
+
+			{(error || result?.pushError) && (
+				<div role="alert" className="whitespace-pre-wrap rounded-md bg-red-100 p-3 text-sm text-red-800 dark:bg-red-900/40 dark:text-red-200">
+					{error ?? `Push failed. The commit stays local.\n${result?.pushError}`}
+				</div>
+			)}
+
+			<div className="flex flex-wrap justify-end gap-3">
+				{result ? (
+					<button
+						type="button"
+						onClick={onClose}
+						className={`${buttonClass} bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600`}
+					>
+						Close
+					</button>
+				) : (
+					<>
+						<button
+							type="button"
+							onClick={onClose}
+							disabled={pending !== null}
+							className={`${buttonClass} bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600`}
+						>
+							Not now
+						</button>
+						<button
+							type="button"
+							onClick={() => void commit(false)}
+							disabled={pending !== null || !message.trim()}
+							className={`${buttonClass} ${options.upstream ? "bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600" : "bg-blue-600 text-white hover:bg-blue-700"} focus:ring-blue-500`}
+						>
+							{pending === "commit" ? "Committing…" : "Commit"}
+						</button>
+						{options.upstream && (
+							<button
+								type="button"
+								onClick={() => void commit(true)}
+								disabled={pending !== null || !message.trim()}
+								className={`${buttonClass} bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500`}
+							>
+								{pending === "push" ? "Pushing…" : `Commit and push to ${options.upstream}`}
+							</button>
+						)}
+					</>
+				)}
+			</div>
+		</div>
 	);
 }

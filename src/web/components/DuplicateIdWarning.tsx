@@ -1,15 +1,13 @@
 import { useState } from "react";
 import type { DuplicateRepairPlan } from "../../core/duplicate-task-repair";
-import { DuplicateIdRepairModal } from "./DuplicateIdRepairModal";
 
 interface DuplicateIdWarningProps {
 	plan: DuplicateRepairPlan | null;
-	onRepaired: () => Promise<void>;
+	onReview: () => void;
 }
 
-export function DuplicateIdWarning({ plan, onRepaired }: DuplicateIdWarningProps) {
+export function DuplicateIdWarning({ plan, onReview }: DuplicateIdWarningProps) {
 	const [dismissed, setDismissed] = useState(false);
-	const [isRepairOpen, setIsRepairOpen] = useState(false);
 
 	if (!plan || !Array.isArray(plan.groups) || plan.groups.length === 0 || dismissed) return null;
 
@@ -37,7 +35,7 @@ export function DuplicateIdWarning({ plan, onRepaired }: DuplicateIdWarningProps
 					<div className="ml-auto flex shrink-0 items-center gap-2">
 						<button
 							type="button"
-							onClick={() => setIsRepairOpen(true)}
+							onClick={onReview}
 							className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-amber-50 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
 						>
 							Review repair
@@ -53,12 +51,6 @@ export function DuplicateIdWarning({ plan, onRepaired }: DuplicateIdWarningProps
 					</div>
 				</div>
 			</section>
-			<DuplicateIdRepairModal
-				isOpen={isRepairOpen}
-				plan={plan}
-				onClose={() => setIsRepairOpen(false)}
-				onRepaired={onRepaired}
-			/>
 		</>
 	);
 }

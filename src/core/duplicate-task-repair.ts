@@ -695,3 +695,68 @@ export async function applyDuplicateTaskIdRepair(
 		}
 	});
 }
+
+export interface DuplicateRepairCommitOptions {
+	repository: boolean;
+	/** Upstream of the current branch, e.g. `origin/main`; null when the repair can only be committed. */
+	upstream: string | null;
+	message: string;
+}
+
+export interface DuplicateRepairCommitResult {
+	commit: string | null;
+	pushedTo: string | null;
+	pulled: boolean;
+	/** Set when the commit landed but the push did not; the commit stays local. */
+	pushError?: string;
+}
+
+/** What the commit step after a repair can offer, with a default message naming each renamed ID. */
+export async function getDuplicateRepairCommitOptions(
+	core: Core,
+	changes: readonly DuplicateRepairChange[],
+): Promise<DuplicateRepairCommitOptions> {
+	const message = [
+		"Repair duplicate task IDs",
+		"",
+		...changes.map((change) => `${change.oldId} -> ${change.newId} (${change.title})`),
+	].join("\n");
+	if (!(await core.git.isRepository())) return { repository: false, upstream: null, message };
+	return { repository: true, upstream: (await core.git.getUpstream())?.name ?? null, message };
+}
+
+/**
+ * Commits the files a repair renamed (both the old and the new path) and optionally pushes them to
+ * the current branch's upstream. Paths must be project-relative and stay inside the backlog directory.
+ */
+export async function commitDuplicateTaskIdRepair(
+	core: Core,
+	changes: readonly Pick<DuplicateRepairChange, "sourcePath" | "targetPath">[],
+	message: string,
+	push: boolean,
+): Promise<DuplicateRepairCommitResult> {
+	const rootDir = core.filesystem.rootDir;
+	const backlogDir = resolve(rootDir, core.filesystem.backlogDirName);
+	const paths = changes.flatMap((change) => [change.sourcePath, change.targetPath]);
+	for (const path of paths) {
+		const absolutePath = resolve(rootDir, path);
+		if (path.startsWith("/") || !absolutePath.startsWith(`${backlogDir}${sep}`)) {
+			throw new Error(`Refusing to commit a path outside the backlog directory: ${path}`);
+		}
+	}
+	if (paths.length === 0 || !message.trim()) throw new Error("A commit message and repaired files are required.");
+
+	const commit = await core.git.commitSelectedPaths(
+		message.trim(),
+		paths.map((path) => resolve(rootDir, path)),
+	);
+	if (!commit || !push) return { commit, pushedTo: null, pulled: false };
+	const upstream = await core.git.getUpstream();
+	if (!upstream) return { commit, pushedTo: null, pulled: false, pushError: "The current branch has no upstream." };
+	try {
+		const { pulled } = await core.git.pushToUpstream(upstream);
+		return { commit, pushedTo: upstream.name, pulled };
+	} catch (error) {
+		return { commit, pushedTo: null, pulled: false, pushError: error instanceof Error ? error.message : String(error) };
+	}
+}

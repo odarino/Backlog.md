@@ -12,6 +12,16 @@ type GitPathContext = {
 type GitConfigLoader = () => Promise<BacklogConfig | null>;
 
 const FETCH_TIMEOUT_MS = 10_000;
+const PUSH_TIMEOUT_MS = 60_000;
+// Remote commands must fail instead of waiting for credentials nobody can type.
+const NON_INTERACTIVE_REMOTE_ENV = { GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "Never" };
+
+export interface GitUpstream {
+	remote: string;
+	mergeRef: string;
+	/** Display name, e.g. `origin/main`. */
+	name: string;
+}
 
 export interface GitBranchTip {
 	name: string;
@@ -284,6 +294,98 @@ export class GitOperations {
 		} finally {
 			await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
 		}
+	}
+
+	/**
+	 * Commits exactly the given paths, staging deletions of tracked files, and leaves every other
+	 * staged or unstaged change out. Returns the new commit, or null when there was nothing to commit.
+	 */
+	async commitSelectedPaths(message: string, filePaths: string[]): Promise<string | null> {
+		const repoRoot = await this.getRepositoryRoot();
+		if (!repoRoot) return null;
+		for (const filePath of filePaths) {
+			const context = await this.getPathContext(filePath);
+			if (!context) continue;
+			const exists = Boolean(await stat(join(context.repoRoot, context.relativePath)).catch(() => null));
+			const { stdout: tracked } = await this.execGit(["ls-files", "--", context.relativePath], {
+				cwd: context.repoRoot,
+				readOnly: true,
+			});
+			// A file that is gone and was never tracked has nothing to stage.
+			if (exists || tracked.trim()) await this.addFile(filePath);
+		}
+		const before = await this.resolveHead(repoRoot);
+		try {
+			await this.commitFiles(message, filePaths);
+		} catch (error) {
+			if (error instanceof Error && error.message.startsWith("No staged changes")) return null;
+			throw error;
+		}
+		const after = await this.resolveHead(repoRoot);
+		return after && after !== before ? after : null;
+	}
+
+	/** The upstream of the current branch, or null when there is none or remote operations are disabled. */
+	async getUpstream(): Promise<GitUpstream | null> {
+		await this.loadConfigIfNeeded();
+		if (this.config?.remoteOperations === false) return null;
+		const branch = await this.getCurrentBranch();
+		if (!branch) return null;
+		const readConfig = async (key: string) =>
+			(
+				await this.execGit(["config", "--get", `branch.${branch}.${key}`], { readOnly: true, acceptedExitCodes: [1] })
+			).stdout.trim();
+		const remote = await readConfig("remote");
+		const mergeRef = await readConfig("merge");
+		if (!remote || remote === "." || !mergeRef) return null;
+		return { remote, mergeRef, name: `${remote}/${mergeRef.replace(/^refs\/heads\//, "")}` };
+	}
+
+	/**
+	 * Pushes HEAD to the upstream. When the remote is ahead, pulls once with a merge and pushes again;
+	 * a pull that stops on a conflict is aborted so the working tree is left as it was.
+	 */
+	async pushToUpstream(upstream: GitUpstream): Promise<{ pulled: boolean }> {
+		const push = () =>
+			this.execGit(["push", upstream.remote, `HEAD:${upstream.mergeRef}`], {
+				timeoutMs: PUSH_TIMEOUT_MS,
+				env: NON_INTERACTIVE_REMOTE_ENV,
+			});
+		try {
+			await push();
+			return { pulled: false };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			// Only a remote that is ahead is fixed by pulling; protected branches, hooks, and auth are not.
+			if (!/non-fast-forward|fetch first/.test(message)) throw error;
+		}
+		const repoRoot = (await this.getRepositoryRoot()) ?? this.projectRoot;
+		try {
+			await this.execGit(
+				[
+					"pull",
+					// Explicit, so a user's pull.rebase setting cannot turn the pull into a rebase.
+					"--no-rebase",
+					"--no-edit",
+					...(this.config?.bypassGitHooks ? ["--no-verify"] : []),
+					upstream.remote,
+					upstream.mergeRef,
+				],
+				{ timeoutMs: PUSH_TIMEOUT_MS, env: NON_INTERACTIVE_REMOTE_ENV },
+			);
+		} catch (error) {
+			const { stdout } = await this.execGit(["rev-parse", "--git-path", "MERGE_HEAD"], {
+				cwd: repoRoot,
+				readOnly: true,
+			});
+			const mergeHead = stdout.trim();
+			if (mergeHead && (await stat(isAbsolute(mergeHead) ? mergeHead : join(repoRoot, mergeHead)).catch(() => null))) {
+				await this.execGit(["merge", "--abort"]);
+			}
+			throw error;
+		}
+		await push();
+		return { pulled: true };
 	}
 
 	private async assertNoCommitOperationInProgress(repoRoot: string): Promise<void> {

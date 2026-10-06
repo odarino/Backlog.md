@@ -32,6 +32,7 @@ Homebrew and Nix install the upstream package, which does not have the fork feat
 - **Image picker.** The image button in the editor toolbar opens a picker. Search, select, and insert existing images, or upload new ones.
 - **Workflow editor.** In Settings, add, rename, reorder, color, and delete statuses. A rename or delete rewrites the affected tasks in `tasks/`, `completed/`, and `archive/tasks/`. Status colors show on the board columns and in the task list.
 - **Clone task.** Copy a task into a new one from the task view (**Clone**), the CLI (`backlog task clone <id> [--title <title>]`), or MCP (`task_clone`). The copy keeps the content, labels, links, and checklists (unchecked), and resets the status (drafts stay drafts), due date, notes, summary, and comments.
+- **Duplicate task ID repair.** When a task link fails because two files have the same ID, the error message shows **Review repair**. After the repair, commit the renamed files and push them from the same dialog, or use `backlog doctor --fix --commit` or `--push` (add `--message <text>` for your own message). If the remote is ahead, the push pulls once with a merge and tries again.
 - **Safer local server.** The web server rejects requests from other websites and DNS rebinding.
 
 ### Configuration
@@ -50,6 +51,7 @@ Homebrew and Nix install the upstream package, which does not have the fork feat
 - A running MCP server keeps the old status names until it restarts.
 - Tasks that exist only on other git branches are not rewritten when you rename or delete a status.
 - Two processes that change the workflow at the same moment can still conflict. Reload and try again.
+- A repair push goes only to the existing upstream of the current branch. Backlog.md never force-pushes and never sets an upstream. If the pull before the second push has a conflict, Backlog.md aborts the pull and the commit stays local.
 - The web UI accepts only `http://127.0.0.1:<port>` and `http://localhost:<port>`. Access through a tunnel or a proxy is blocked.
 
 ![Backlog demo GIF using: backlog board](./.github/backlog-v1.40.gif)

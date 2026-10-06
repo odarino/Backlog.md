@@ -18,6 +18,7 @@ interface LayoutProps {
 	error?: Error | null;
 	onRefreshData: () => Promise<void>;
 	duplicateRepairPlan?: DuplicateRepairPlan | null;
+	onReviewDuplicateRepair: () => void;
 }
 
 export default function Layout({
@@ -32,6 +33,7 @@ export default function Layout({
 	error,
 	onRefreshData,
 	duplicateRepairPlan = null,
+	onReviewDuplicateRepair,
 }: LayoutProps) {
 	return (
 		<div className="h-screen bg-gray-50 dark:bg-gray-900 flex overflow-hidden transition-colors duration-200">
@@ -47,7 +49,7 @@ export default function Layout({
 			/>
 			<div className="flex-1 flex flex-col min-h-0 min-w-0">
 				<Navigation projectName={projectName} loadingMessage={loadingMessage} />
-				<DuplicateIdWarning plan={duplicateRepairPlan} onRepaired={onRefreshData} />
+				<DuplicateIdWarning plan={duplicateRepairPlan} onReview={onReviewDuplicateRepair} />
 				<main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
 					<Outlet context={{ tasks, docs, decisions, isLoading, onRefreshData }} />
 				</main>
