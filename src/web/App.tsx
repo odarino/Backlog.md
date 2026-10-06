@@ -13,6 +13,7 @@ import TaskDetailsModal from './components/TaskDetailsModal';
 import InitializationScreen from './components/InitializationScreen';
 import LoadingSpinner from './components/LoadingSpinner';
 import { SuccessToast } from './components/SuccessToast';
+import { DuplicateIdRepairModal } from './components/DuplicateIdRepairModal';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TaskIdIndexProvider } from './contexts/TaskIdIndexContext';
 import {
@@ -46,6 +47,7 @@ import { parseBrowserLoadingState } from '../utils/browser-loading-state';
 type TaskRouteNavigationState = {
   taskModalFrom?: string;
   taskRouteError?: string;
+  taskRouteAmbiguous?: boolean;
 };
 
 const getTaskRouteNavigationState = (value: unknown): TaskRouteNavigationState => {
@@ -302,6 +304,8 @@ function AppContent() {
   const routeBasePath = tasksRouteWithTitle || tasksRoute ? '/tasks' : boardRouteWithTitle || boardRoute ? '/board' : null;
   const routeNavigationState = getTaskRouteNavigationState(location.state);
   const taskRouteError = routeNavigationState.taskRouteError;
+  const taskRouteAmbiguous = routeNavigationState.taskRouteAmbiguous === true;
+  const [isDuplicateRepairOpen, setIsDuplicateRepairOpen] = useState(false);
 
   // Set version data attribute on body
   React.useEffect(() => {
@@ -630,6 +634,10 @@ function AppContent() {
     }
   }, [taskRouteError]);
 
+  const dismissTaskRouteError = useCallback(() => {
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [location.pathname, location.search, navigate]);
+
   // Incremental refresh: the single-card reorder path's surgical store update,
   // generalized. Refetches only the search corpus (plus milestone entities when
   // the change was milestone-scoped) and reconciles it into the store in place;
@@ -759,7 +767,10 @@ function AppContent() {
               : `Task "${taskId}" could not be opened. Try again.`;
       navigate(`${routeBasePath}${location.search}`, {
         replace: true,
-        state: { taskRouteError: message } satisfies TaskRouteNavigationState,
+        state: {
+          taskRouteError: message,
+          taskRouteAmbiguous: error instanceof ApiError && error.status === 409,
+        } satisfies TaskRouteNavigationState,
       });
     },
     [clearTaskModal, location.search, navigate, routeBasePath],
@@ -1069,15 +1080,43 @@ function AppContent() {
           tabIndex={-1}
           className="fixed left-1/2 top-4 z-[70] flex w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 items-start justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
         >
-          <span>{taskRouteError}</span>
-          <button
-            type="button"
-            className="shrink-0 font-medium underline decoration-red-300 underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-red-500"
-            onClick={() => navigate(`${location.pathname}${location.search}`, { replace: true, state: null })}
-          >
-            Dismiss
-          </button>
+          <span>
+            {taskRouteError}
+            {taskRouteAmbiguous && duplicateRepairPlan?.groups.length === 0 && (
+              <> Run <code>backlog doctor</code> to find the duplicates.</>
+            )}
+          </span>
+          <div className="flex shrink-0 items-center gap-3">
+            {taskRouteAmbiguous && duplicateRepairPlan && duplicateRepairPlan.groups.length > 0 && (
+              <button
+                type="button"
+                className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-500 dark:text-red-950 dark:hover:bg-red-400"
+                onClick={() => setIsDuplicateRepairOpen(true)}
+              >
+                Review repair
+              </button>
+            )}
+            <button
+              type="button"
+              className="font-medium underline decoration-red-300 underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-red-500"
+              onClick={dismissTaskRouteError}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
+      )}
+
+      {duplicateRepairPlan && duplicateRepairPlan.groups.length > 0 && (
+        <DuplicateIdRepairModal
+          isOpen={isDuplicateRepairOpen}
+          plan={duplicateRepairPlan}
+          onClose={() => setIsDuplicateRepairOpen(false)}
+          onRepaired={async () => {
+            await refreshData();
+            dismissTaskRouteError();
+          }}
+        />
       )}
 
       <TaskDetailsModal
