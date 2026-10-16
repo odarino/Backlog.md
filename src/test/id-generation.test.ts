@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Core } from "../core/backlog.ts";
 import { serializeTask } from "../markdown/serializer.ts";
 import type { Task } from "../types/index.ts";
+import { generateNextId } from "../utils/prefix-config.ts";
 
 const TEST_DIR = join(tmpdir(), "backlog-id-gen-test");
 
@@ -155,3 +156,62 @@ describe("Task ID Generation with Archives", () => {
 });
 
 import { initializeTestProject } from "./test-utils.ts";
+
+describe("generateNextId random mode", () => {
+	it("returns a 6-digit id with the prefix", () => {
+		const id = generateNextId(["BACK-1"], "back", undefined, "random", () => 0.5);
+		expect(id).toBe("BACK-550000");
+	});
+
+	it("retries when the id exists", () => {
+		const values = [0, 0.5];
+		const id = generateNextId(["BACK-100000"], "back", undefined, "random", () => values.shift() ?? 0.9);
+		expect(id).toBe("BACK-550000");
+	});
+
+	it("treats lower-case existing ids as taken", () => {
+		const values = [0, 0.5];
+		const id = generateNextId(["back-100000"], "back", undefined, "random", () => values.shift() ?? 0.9);
+		expect(id).toBe("BACK-550000");
+	});
+
+	it("throws after 50 collisions", () => {
+		expect(() => generateNextId(["BACK-100000"], "back", undefined, "random", () => 0)).toThrow(/random task ID/);
+	});
+
+	it("ignores zero padding in random mode", () => {
+		expect(generateNextId([], "back", 10, "random", () => 0)).toBe("BACK-100000");
+	});
+
+	it("keeps sequential mode unchanged", () => {
+		expect(generateNextId(["BACK-7"], "back", undefined, "sequential")).toBe("BACK-8");
+	});
+});
+
+describe("Core random task IDs", () => {
+	let core: Core;
+	let testDir: string;
+
+	beforeEach(async () => {
+		testDir = await mkdtemp(TEST_DIR);
+		core = new Core(testDir);
+		await initializeTestProject(core, "Test Project", false);
+		const config = await core.filesystem.loadConfig();
+		if (!config) throw new Error("config missing");
+		await core.filesystem.saveConfig({ ...config, taskIdMode: "random" });
+		core.filesystem.invalidateConfigCache();
+	});
+
+	afterEach(async () => {
+		await rm(testDir, { recursive: true, force: true });
+	});
+
+	it("creates random task ids, dotted subtasks and sequential drafts", async () => {
+		const { task } = await core.createTaskFromInput({ title: "Random" }, false);
+		expect(task.id).toMatch(/^[A-Z]+-\d{6}$/);
+		const sub = await core.createTaskFromInput({ title: "Sub", parentTaskId: task.id }, false);
+		expect(sub.task.id).toBe(`${task.id}.1`);
+		const draft = await core.createTaskFromInput({ title: "Draft", status: "Draft" }, false);
+		expect(draft.task.id).toMatch(/^DRAFT-\d{1,3}$/);
+	});
+});

@@ -177,6 +177,7 @@ const CONFIG_GET_KEYS = [
 	"filesystemOnly",
 	"bypassGitHooks",
 	"zeroPaddedIds",
+	"taskIdMode",
 	"checkActiveBranches",
 	"activeBranchDays",
 ] as const;
@@ -195,6 +196,7 @@ const CONFIG_SET_KEYS = [
 	"filesystemOnly",
 	"bypassGitHooks",
 	"zeroPaddedIds",
+	"taskIdMode",
 	"checkActiveBranches",
 	"activeBranchDays",
 ] as const;
@@ -5109,7 +5111,7 @@ agentsCmd
 
 // Config command group
 const CONFIG_AVAILABLE_KEYS =
-	"Available keys: defaultEditor, projectName, defaultAssignee, defaultStatus, statuses, labels, priorities, types, projects, milestones, definitionOfDone, dateFormat, maxColumnWidth, defaultPort, autoOpenBrowser, hideEmptyColumns, remoteOperations, autoCommit, filesystemOnly, bypassGitHooks, zeroPaddedIds, checkActiveBranches, activeBranchDays";
+	"Available keys: defaultEditor, projectName, defaultAssignee, defaultStatus, statuses, labels, priorities, types, projects, milestones, definitionOfDone, dateFormat, maxColumnWidth, defaultPort, autoOpenBrowser, hideEmptyColumns, remoteOperations, autoCommit, filesystemOnly, bypassGitHooks, zeroPaddedIds, taskIdMode, checkActiveBranches, activeBranchDays";
 
 const configCmd = addHelpSchema(program.command("config"), {
 	reads: "Project Backlog.md configuration",
@@ -5292,6 +5294,9 @@ addHelpSchema(configCmd.command("get <key>"), {
 				case "bypassGitHooks":
 					console.log(config.bypassGitHooks?.toString() || "");
 					break;
+				case "taskIdMode":
+					console.log(config.taskIdMode ?? "sequential");
+					break;
 				case "zeroPaddedIds":
 					console.log(config.zeroPaddedIds?.toString() || "(disabled)");
 					break;
@@ -5459,6 +5464,14 @@ addHelpSchema(configCmd.command("set <key> <value>"), {
 						console.error("bypassGitHooks must be true or false");
 						process.exit(1);
 					}
+					break;
+				}
+				case "taskIdMode": {
+					if (value !== "sequential" && value !== "random") {
+						console.error("taskIdMode must be sequential or random.");
+						process.exit(1);
+					}
+					config.taskIdMode = value === "random" ? "random" : undefined;
 					break;
 				}
 				case "zeroPaddedIds": {
