@@ -65,6 +65,35 @@ describe("imageFilesFrom", () => {
 		expect(imageFilesFrom([png, txt])).toEqual([png]);
 		expect(imageFilesFrom(null)).toEqual([]);
 	});
+
+	it("infers the type from the extension when the type is empty", () => {
+		const file = new File([new Uint8Array([1])], "shot.PNG", { type: "" });
+		const [out] = imageFilesFrom([file]);
+		expect(out?.type).toBe("image/png");
+		expect(out?.name).toBe("shot.PNG");
+	});
+
+	it("skips empty-type files with an unknown extension", () => {
+		expect(imageFilesFrom([new File(["x"], "notes.txt", { type: "" })])).toEqual([]);
+	});
+
+	it("reads files exposed only through DataTransfer items", () => {
+		const png = new File([new Uint8Array([1])], "image.png", { type: "image/png" });
+		const transfer = {
+			files: [] as unknown as FileList,
+			items: [{ kind: "file", getAsFile: () => png }] as unknown as DataTransferItemList,
+		} as DataTransfer;
+		expect(imageFilesFrom(transfer)).toEqual([png]);
+	});
+
+	it("returns a file once when files and items both expose it", () => {
+		const png = new File([new Uint8Array([1])], "image.png", { type: "image/png", lastModified: 5 });
+		const transfer = {
+			files: [png] as unknown as FileList,
+			items: [{ kind: "file", getAsFile: () => png }] as unknown as DataTransferItemList,
+		} as DataTransfer;
+		expect(imageFilesFrom(transfer)).toHaveLength(1);
+	});
 });
 
 describe("toast text", () => {
