@@ -51,7 +51,7 @@ function withImageType(file: File): File | null {
 }
 
 function isDataTransfer(source: unknown): source is DataTransfer {
-	return typeof source === "object" && source !== null && "items" in source && "files" in source;
+	return typeof source === "object" && source !== null && "files" in source;
 }
 
 // Windows clipboards can expose an image only through items, or as a file with an empty MIME type.
