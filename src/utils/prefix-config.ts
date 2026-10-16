@@ -290,21 +290,52 @@ export function idsEqual(id1: string, id2: string, prefix: string): boolean {
 	return normalizeId(id1, prefix).toLowerCase() === normalizeId(id2, prefix).toLowerCase();
 }
 
+export type TaskIdMode = "sequential" | "random";
+
+const RANDOM_ID_MIN = 100000;
+const RANDOM_ID_SPAN = 900000;
+const RANDOM_ID_TRIES = 50;
+
+function secureRandom(): number {
+	const buffer = new Uint32Array(1);
+	crypto.getRandomValues(buffer);
+	return (buffer[0] as number) / 2 ** 32;
+}
+
 /**
  * Generates the next ID in sequence given a list of existing IDs.
  *
  * @param existingIds - Array of existing IDs
  * @param prefix - The prefix to use
  * @param zeroPadding - Optional zero padding width (e.g., 3 for "001")
+ * @param mode - "random" picks a free 6-digit number (padding ignored)
  * @returns Next ID in sequence (e.g., "task-43")
  *
  * @example
  * generateNextId(["task-1", "task-2", "task-5"], "task") // => "task-6"
  * generateNextId(["task-001", "task-002"], "task", 3) // => "task-003"
  */
-export function generateNextId(existingIds: string[], prefix: string, zeroPadding?: number): string {
+export function generateNextId(
+	existingIds: string[],
+	prefix: string,
+	zeroPadding?: number,
+	mode: TaskIdMode = "sequential",
+	random: () => number = secureRandom,
+): string {
 	const regex = buildIdRegex(prefix);
 	const upperPrefix = prefix.toUpperCase();
+	if (mode === "random") {
+		const taken = new Set<string>();
+		for (const id of existingIds) {
+			const body = id.match(regex)?.[1];
+			if (body && !body.includes(".")) taken.add(BigInt(body).toString());
+		}
+		for (let attempt = 0; attempt < RANDOM_ID_TRIES; attempt++) {
+			const num = String(RANDOM_ID_MIN + Math.floor(random() * RANDOM_ID_SPAN));
+			if (!taken.has(num)) return `${upperPrefix}-${num}`;
+		}
+		throw new Error(`Could not find a free random task ID after ${RANDOM_ID_TRIES} tries`);
+	}
 	let max = 0n;
 
 	for (const id of existingIds) {

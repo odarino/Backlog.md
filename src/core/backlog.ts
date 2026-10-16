@@ -1535,7 +1535,12 @@ export class Core {
 			return generateNextSubtaskId(allIds, normalizedParent, prefix, config?.zeroPaddedIds);
 		}
 
-		return generateNextPrefixedId(allIds, prefix, config?.zeroPaddedIds);
+		return generateNextPrefixedId(
+			allIds,
+			prefix,
+			config?.zeroPaddedIds,
+			type === EntityType.Task ? (config?.taskIdMode ?? "sequential") : "sequential",
+		);
 	}
 
 	/**

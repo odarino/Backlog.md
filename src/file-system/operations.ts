@@ -1219,7 +1219,12 @@ export class FileSystem {
 				const existingIds = [...existingTasks, ...completedTasks].map((t) => t.id);
 
 				// Generate new task ID
-				const newTaskId = generateNextId(existingIds, taskPrefix, config?.zeroPaddedIds);
+				const newTaskId = generateNextId(
+					existingIds,
+					taskPrefix,
+					config?.zeroPaddedIds,
+					config?.taskIdMode ?? "sequential",
+				);
 
 				const promotedStatus =
 					!draft.status || draft.status.trim().toLowerCase() === "draft"
@@ -2200,6 +2205,9 @@ ${description || `Milestone: ${title}`}`,
 				case "filesystemOnly":
 					config.filesystemOnly = value.toLowerCase() === "true";
 					break;
+				case "task_id_mode":
+					config.taskIdMode = value === "random" ? "random" : "sequential";
+					break;
 				case "zero_padded_ids":
 					config.zeroPaddedIds = Number.parseInt(value, 10);
 					break;
@@ -2251,6 +2259,7 @@ ${description || `Milestone: ${title}`}`,
 			autoCommit: config.autoCommit,
 			filesystemOnly: config.filesystemOnly,
 			zeroPaddedIds: config.zeroPaddedIds,
+			taskIdMode: config.taskIdMode,
 			bypassGitHooks: config.bypassGitHooks,
 			checkActiveBranches: config.checkActiveBranches,
 			activeBranchDays: config.activeBranchDays,
@@ -2296,6 +2305,7 @@ ${description || `Milestone: ${title}`}`,
 			...(typeof config.autoCommit === "boolean" ? [`auto_commit: ${config.autoCommit}`] : []),
 			...(typeof config.filesystemOnly === "boolean" ? [`filesystem_only: ${config.filesystemOnly}`] : []),
 			...(typeof config.zeroPaddedIds === "number" ? [`zero_padded_ids: ${config.zeroPaddedIds}`] : []),
+			...(config.taskIdMode === "random" ? ["task_id_mode: random"] : []),
 			...(typeof config.bypassGitHooks === "boolean" ? [`bypass_git_hooks: ${config.bypassGitHooks}`] : []),
 			...(typeof config.checkActiveBranches === "boolean"
 				? [`check_active_branches: ${config.checkActiveBranches}`]
