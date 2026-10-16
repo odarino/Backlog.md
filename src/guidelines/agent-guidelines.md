@@ -761,6 +761,8 @@ backlog doc view doc-1
 
 #### MCP / API Usage
 
+- Use `asset_add` to add an image file (`path`, optional `taskId`, optional `original`). CLI: `backlog asset add <file> [--task <id>] [--original]`.
+- The config key `taskIdMode` is `sequential` (default) or `random` (6-digit task IDs). It applies to tasks only. Subtasks keep the `.1` form.
 - Use `document_create` to create documents with title, content, optional type/tags, and optional docs-directory-relative path.
 - Use `document_update` to update document content, title, type, tags, or path while preserving document metadata.
 - Document responses include the persisted docs-relative file path so agents can reference the created file without scanning source internals.

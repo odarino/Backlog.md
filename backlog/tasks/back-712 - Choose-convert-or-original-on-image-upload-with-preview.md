@@ -1,9 +1,11 @@
 ---
 id: BACK-712
 title: Choose convert or original on image upload with preview
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-16 13:54'
+updated_date: '2026-10-16 14:01'
 labels:
   - web
   - cli
