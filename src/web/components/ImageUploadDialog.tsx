@@ -22,7 +22,11 @@ export default function ImageUploadDialog({ files, onConfirm, onCancel }: ImageU
 	const [originalUrls, setOriginalUrls] = useState<string[]>([]);
 
 	useEffect(() => {
-		if (files.length === 0) return;
+		if (files.length === 0) {
+			setPreviews([]);
+			setOriginalUrls([]);
+			return;
+		}
 		let cancelled = false;
 		const urls = files.map((file) => URL.createObjectURL(file));
 		setOriginalUrls(urls);
@@ -56,9 +60,7 @@ export default function ImageUploadDialog({ files, onConfirm, onCancel }: ImageU
 		}
 		return null;
 	})();
-	useEffect(() => {
-		if (failureMessage) setMode("original");
-	}, [failureMessage]);
+	const effectiveMode: UploadMode = failureMessage ? "original" : mode;
 
 	if (files.length === 0) return null;
 	const loading = previews.some((p) => p.status === "loading");
@@ -77,8 +79,8 @@ export default function ImageUploadDialog({ files, onConfirm, onCancel }: ImageU
 				<div className="mb-3 flex gap-2">
 					<button
 						type="button"
-						className={toggleClass(mode === "convert")}
-						aria-pressed={mode === "convert"}
+						className={toggleClass(effectiveMode === "convert")}
+						aria-pressed={effectiveMode === "convert"}
 						disabled={Boolean(failureMessage)}
 						onClick={() => setMode("convert")}
 					>
@@ -86,8 +88,8 @@ export default function ImageUploadDialog({ files, onConfirm, onCancel }: ImageU
 					</button>
 					<button
 						type="button"
-						className={toggleClass(mode === "original")}
-						aria-pressed={mode === "original"}
+						className={toggleClass(effectiveMode === "original")}
+						aria-pressed={effectiveMode === "original"}
 						onClick={() => setMode("original")}
 					>
 						Original
@@ -98,7 +100,7 @@ export default function ImageUploadDialog({ files, onConfirm, onCancel }: ImageU
 					{files.map((file, index) => {
 						const state = previews[index];
 						const ready = state?.status === "ready" ? state.preview : null;
-						const src = mode === "convert" && ready ? ready.dataUrl : originalUrls[index];
+						const src = effectiveMode === "convert" && ready ? ready.dataUrl : originalUrls[index];
 						return (
 							<li key={`${file.name}-${index}`} className="flex items-center gap-3">
 								{src && (
@@ -129,8 +131,8 @@ export default function ImageUploadDialog({ files, onConfirm, onCancel }: ImageU
 					<button
 						type="button"
 						className="px-3 py-1 text-sm rounded-md bg-blue-600 text-white disabled:opacity-50"
-						disabled={loading && mode === "convert"}
-						onClick={() => onConfirm(mode)}
+						disabled={loading && effectiveMode === "convert"}
+						onClick={() => onConfirm(effectiveMode)}
 					>
 						Insert
 					</button>
