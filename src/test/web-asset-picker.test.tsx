@@ -217,6 +217,42 @@ describe("AssetPickerModal", () => {
 		expect(tile("fresh.webp").getAttribute("aria-pressed")).toBe("true");
 	});
 
+	it("drops picked files when the picker closes and keeps the picker open on Escape while the dialog shows", async () => {
+		apiClient.listAssets = async () => assets;
+		apiClient.previewAsset = async () => ({
+			dataUrl: "data:image/webp;base64,AA==",
+			mime: "image/webp",
+			originalSize: 10,
+			finalSize: 5,
+			compressed: true,
+		});
+		setupDom();
+		activeRoot = createRoot(document.getElementById("root") as HTMLElement);
+		const renderWith = async (isOpen: boolean) => {
+			await act(async () => {
+				activeRoot?.render(<AssetPickerModal isOpen={isOpen} taskId="TASK-5" onClose={() => {}} onInsert={() => {}} />);
+				await Promise.resolve();
+			});
+			await tick();
+		};
+		await renderWith(true);
+		const input = document.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+		Object.defineProperty(input, "files", { value: [new File(["x"], "fresh.png", { type: "image/png" })] });
+		await act(async () => {
+			input.dispatchEvent(new window.Event("change", { bubbles: true }));
+		});
+		await tick();
+		const dialogSelector = '[role="dialog"][aria-label="Upload images"]';
+		expect(document.querySelector(dialogSelector)).not.toBeNull();
+		await act(async () => {
+			document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+		});
+		expect(document.querySelector('input[type="search"]')).not.toBeNull();
+		await renderWith(false);
+		await renderWith(true);
+		expect(document.querySelector(dialogSelector)).toBeNull();
+	});
+
 	it("Escape closes only the picker and keeps the task modal in edit mode", async () => {
 		const originalListAssets = apiClient.listAssets;
 		apiClient.listAssets = async () => assets;

@@ -34,7 +34,10 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reload only when the picker opens or the task changes.
 	useEffect(() => {
-		if (!isOpen) return;
+		if (!isOpen) {
+			setPickedFiles([]);
+			return;
+		}
 		setQuery("");
 		setSelected([]);
 		setError(null);
@@ -123,6 +126,7 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 			isOpen={true}
 			onClose={onClose}
 			title="Images"
+			disableEscapeClose={pickedFiles.length > 0}
 			maxWidthClass="max-w-3xl"
 			actions={
 				<div className="flex items-center gap-2">
