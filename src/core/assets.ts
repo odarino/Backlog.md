@@ -8,7 +8,7 @@ import {
 	compressImage,
 	detectImageKind,
 	ImageDecodeError,
-	type ImageKind,
+	originalImageResult,
 	UnsupportedImageError,
 } from "./image-compress.ts";
 
@@ -113,20 +113,11 @@ async function placeWithoutClobber(
 	throw new Error(`No free file name for ${stem}.${extension}`);
 }
 
-const ORIGINAL_FORMAT: Record<ImageKind, { extension: string; mime: string }> = {
-	jpeg: { extension: "jpg", mime: "image/jpeg" },
-	png: { extension: "png", mime: "image/png" },
-	webp: { extension: "webp", mime: "image/webp" },
-	gif: { extension: "gif", mime: "image/gif" },
-	svg: { extension: "svg", mime: "image/svg+xml" },
-	avif: { extension: "avif", mime: "image/avif" },
-};
-
 async function prepareImage(bytes: Uint8Array, options: CompressOptions, mode: UploadMode): Promise<CompressResult> {
 	if (mode === "original") {
 		const kind = detectImageKind(bytes);
 		if (!kind) throw new AssetError("Unsupported image type", 415);
-		return { bytes, ...ORIGINAL_FORMAT[kind], compressed: false };
+		return originalImageResult(bytes, kind);
 	}
 	try {
 		return await compressImage(bytes, options);

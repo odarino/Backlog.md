@@ -52,6 +52,8 @@ describe("previewAsset", () => {
 		const preview = await previewAsset(PNG, compressOptionsFromConfig(null));
 		expect(preview.dataUrl.startsWith(`data:${preview.mime};base64,`)).toBe(true);
 		expect(preview.originalSize).toBe(PNG.byteLength);
+		expect(preview.compressed).toBe(false);
+		expect(preview.finalSize).toBe(PNG.byteLength);
 		expect(await readdir(root)).toEqual([]);
 	});
 });

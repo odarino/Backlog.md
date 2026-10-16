@@ -63,6 +63,10 @@ const EXTENSION: Record<ImageKind, string> = {
 	avif: "avif",
 };
 
+export function originalImageResult(bytes: Uint8Array, kind: ImageKind): CompressResult {
+	return { bytes, extension: EXTENSION[kind], mime: MIME[kind], compressed: false };
+}
+
 const SVG_START = /^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE svg[^>]*>\s*)?<svg[\s/>]/i;
 
 function ascii(bytes: Uint8Array, start: number, end: number): string {
@@ -246,7 +250,7 @@ async function decode(kind: "jpeg" | "png" | "webp", bytes: Uint8Array): Promise
 export async function compressImage(bytes: Uint8Array, options: CompressOptions): Promise<CompressResult> {
 	const kind = detectImageKind(bytes);
 	if (!kind) throw new UnsupportedImageError();
-	const original: CompressResult = { bytes, extension: EXTENSION[kind], mime: MIME[kind], compressed: false };
+	const original = originalImageResult(bytes, kind);
 	if (kind === "gif" || kind === "svg" || kind === "avif") return original;
 
 	const declared = readImageDimensions(kind, bytes);
