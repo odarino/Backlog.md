@@ -27,6 +27,7 @@ Mark finished work Done (or the configured final status). Leave it on the board 
 - `task_view` — read full task context (description, plan, notes, comments, final summary, acceptance criteria, Definition of Done)
 - `definition_of_done_defaults_get` — read project-level Definition of Done defaults from config
 - `definition_of_done_defaults_upsert` — replace project-level Definition of Done defaults in config
+- `asset_add` — add an image file to the backlog assets (`path`, optional `taskId`, optional `original` to skip WebP conversion)
 - `document_list` — list documents, including type, path, timestamps, and tags
 - `document_view` — view document metadata and markdown content
 - `document_create` — create a document with title, content, optional type/tags, and optional docs-directory-relative path

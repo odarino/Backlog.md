@@ -33,8 +33,48 @@ export function replaceFirst(value: string, search: string, replacement: string)
 	return index < 0 ? value : value.slice(0, index) + replacement + value.slice(index + search.length);
 }
 
-export function imageFilesFrom(files: FileList | File[] | null | undefined): File[] {
-	return Array.from(files ?? []).filter((file) => file.type.startsWith("image/"));
+const IMAGE_TYPE_BY_EXTENSION: Record<string, string> = {
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	webp: "image/webp",
+	gif: "image/gif",
+	svg: "image/svg+xml",
+	avif: "image/avif",
+};
+
+function withImageType(file: File): File | null {
+	if (file.type.startsWith("image/")) return file;
+	if (file.type) return null;
+	const type = IMAGE_TYPE_BY_EXTENSION[file.name.split(".").pop()?.toLowerCase() ?? ""];
+	return type ? new File([file], file.name, { type, lastModified: file.lastModified }) : null;
+}
+
+function isDataTransfer(source: unknown): source is DataTransfer {
+	return typeof source === "object" && source !== null && "files" in source;
+}
+
+// Windows clipboards can expose an image only through items, or as a file with an empty MIME type.
+export function imageFilesFrom(source: DataTransfer | FileList | File[] | null | undefined): File[] {
+	const candidates: File[] = [];
+	if (isDataTransfer(source)) {
+		const fromFiles = Array.from(source.files ?? []);
+		const fromItems: File[] = [];
+		for (const item of Array.from(source.items ?? [])) {
+			if (item.kind !== "file") continue;
+			const file = item.getAsFile();
+			if (file) fromItems.push(file);
+		}
+		candidates.push(...(fromFiles.length ? fromFiles : fromItems));
+	} else {
+		candidates.push(...Array.from(source ?? []));
+	}
+	const result: File[] = [];
+	for (const candidate of candidates) {
+		const file = withImageType(candidate);
+		if (file) result.push(file);
+	}
+	return result;
 }
 
 export function formatBytes(bytes: number): string {

@@ -1,8 +1,9 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AssetEntry, SavedAsset } from "../../types";
+import type { AssetEntry, SavedAsset, UploadMode } from "../../types";
 import { apiClient } from "../lib/api";
-import { imageMarkdown } from "../lib/markdown-image-insert";
+import { imageFilesFrom, imageMarkdown } from "../lib/markdown-image-insert";
+import ImageUploadDialog from "./ImageUploadDialog";
 import Modal from "./Modal";
 
 interface Props {
@@ -19,6 +20,7 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 	const [selected, setSelected] = useState<string[]>([]);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [pickedFiles, setPickedFiles] = useState<File[]>([]);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const currentFolder = taskId?.toLowerCase() ?? null;
 
@@ -32,7 +34,10 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reload only when the picker opens or the task changes.
 	useEffect(() => {
-		if (!isOpen) return;
+		if (!isOpen) {
+			setPickedFiles([]);
+			return;
+		}
 		setQuery("");
 		setSelected([]);
 		setError(null);
@@ -60,16 +65,20 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 		onClose();
 	};
 
-	const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
-		const files = Array.from(event.currentTarget.files ?? []);
+	const handleFiles = (event: ChangeEvent<HTMLInputElement>) => {
+		setPickedFiles(imageFilesFrom(Array.from(event.currentTarget.files ?? [])));
 		event.currentTarget.value = "";
-		if (files.length === 0) return;
+	};
+
+	const uploadPicked = async (mode: UploadMode) => {
+		const files = pickedFiles;
+		setPickedFiles([]);
 		setUploading(true);
 		setError(null);
 		const added: string[] = [];
 		for (const file of files) {
 			try {
-				const saved = await apiClient.uploadAsset(file, file.name, taskId);
+				const saved = await apiClient.uploadAsset(file, file.name, taskId, mode);
 				added.push(saved.path);
 				onUploaded?.(saved);
 			} catch (uploadError) {
@@ -117,6 +126,7 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 			isOpen={true}
 			onClose={onClose}
 			title="Images"
+			disableEscapeClose={pickedFiles.length > 0}
 			maxWidthClass="max-w-3xl"
 			actions={
 				<div className="flex items-center gap-2">
@@ -126,7 +136,7 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 						accept="image/*"
 						multiple
 						className="hidden"
-						onChange={(event) => void handleFiles(event)}
+						onChange={handleFiles}
 					/>
 					<button
 						type="button"
@@ -162,6 +172,7 @@ export default function AssetPickerModal({ isOpen, taskId, onClose, onInsert, on
 			)}
 			{renderGroup("This task", mine)}
 			{renderGroup("All assets", others)}
+			<ImageUploadDialog files={pickedFiles} onConfirm={(mode) => void uploadPicked(mode)} onCancel={() => setPickedFiles([])} />
 		</Modal>,
 		document.body,
 	);

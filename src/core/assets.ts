@@ -1,8 +1,16 @@
 import { constants, type Dirent, type Stats } from "node:fs";
 import { copyFile, link, mkdir, readdir, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, relative, sep } from "node:path";
-import type { AssetEntry, SavedAsset, Task, TaskUpdateInput } from "../types/index.ts";
-import { type CompressOptions, compressImage, ImageDecodeError, UnsupportedImageError } from "./image-compress.ts";
+import type { AssetEntry, AssetPreview, SavedAsset, Task, TaskUpdateInput, UploadMode } from "../types/index.ts";
+import {
+	type CompressOptions,
+	type CompressResult,
+	compressImage,
+	detectImageKind,
+	ImageDecodeError,
+	originalImageResult,
+	UnsupportedImageError,
+} from "./image-compress.ts";
 
 export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 export const UNSORTED_FOLDER = "_unsorted";
@@ -105,22 +113,50 @@ async function placeWithoutClobber(
 	throw new Error(`No free file name for ${stem}.${extension}`);
 }
 
-export async function saveAsset(
-	assetsRoot: string,
-	input: { bytes: Uint8Array; name?: string; taskId?: string | null; options: CompressOptions; now?: Date },
-): Promise<SavedAsset> {
-	if (input.bytes.byteLength > MAX_ASSET_BYTES) throw new AssetError("Image is larger than 25 MB", 413);
-	if (input.bytes.byteLength === 0) throw new AssetError("Empty upload", 400);
-	const folder = assetFolderForTask(input.taskId);
-
-	let result: Awaited<ReturnType<typeof compressImage>>;
+async function prepareImage(bytes: Uint8Array, options: CompressOptions, mode: UploadMode): Promise<CompressResult> {
+	if (mode === "original") {
+		const kind = detectImageKind(bytes);
+		if (!kind) throw new AssetError("Unsupported image type", 415);
+		return originalImageResult(bytes, kind);
+	}
 	try {
-		result = await compressImage(input.bytes, input.options);
+		return await compressImage(bytes, options);
 	} catch (error) {
 		if (error instanceof UnsupportedImageError) throw new AssetError(error.message, 415);
 		if (error instanceof ImageDecodeError) throw new AssetError(error.message, 422);
 		throw error;
 	}
+}
+
+export async function previewAsset(bytes: Uint8Array, options: CompressOptions): Promise<AssetPreview> {
+	if (bytes.byteLength > MAX_ASSET_BYTES) throw new AssetError("Image is larger than 25 MB", 413);
+	if (bytes.byteLength === 0) throw new AssetError("Empty upload", 400);
+	const result = await prepareImage(bytes, options, "convert");
+	return {
+		dataUrl: `data:${result.mime};base64,${Buffer.from(result.bytes).toString("base64")}`,
+		mime: result.mime,
+		originalSize: bytes.byteLength,
+		finalSize: result.bytes.byteLength,
+		compressed: result.compressed,
+	};
+}
+
+export async function saveAsset(
+	assetsRoot: string,
+	input: {
+		bytes: Uint8Array;
+		name?: string;
+		taskId?: string | null;
+		options: CompressOptions;
+		now?: Date;
+		mode?: UploadMode;
+	},
+): Promise<SavedAsset> {
+	if (input.bytes.byteLength > MAX_ASSET_BYTES) throw new AssetError("Image is larger than 25 MB", 413);
+	if (input.bytes.byteLength === 0) throw new AssetError("Empty upload", 400);
+	const folder = assetFolderForTask(input.taskId);
+
+	const result = await prepareImage(input.bytes, input.options, input.mode ?? "convert");
 
 	const dir = join(assetsRoot, "images", folder);
 	await mkdir(dir, { recursive: true });

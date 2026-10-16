@@ -585,4 +585,16 @@ describe("Config commands", () => {
 
 		await safeCleanup(initDir);
 	});
+
+	it("gets, sets and validates taskIdMode", async () => {
+		const dir = TEST_DIR;
+		const fresh = await $`bun ${CLI_PATH} config get taskIdMode`.cwd(dir).text();
+		expect(fresh.trim()).toBe("sequential");
+		await $`bun ${CLI_PATH} config set taskIdMode random`.cwd(dir).quiet();
+		const after = await $`bun ${CLI_PATH} config get taskIdMode`.cwd(dir).text();
+		expect(after.trim()).toBe("random");
+		const bad = await $`bun ${CLI_PATH} config set taskIdMode foo`.cwd(dir).nothrow().quiet();
+		expect(bad.exitCode).toBe(1);
+		await $`bun ${CLI_PATH} config set taskIdMode sequential`.cwd(dir).quiet();
+	});
 });
