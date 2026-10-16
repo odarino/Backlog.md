@@ -4764,7 +4764,6 @@ assetCmd
 	.description("Add an image asset and print its markdown")
 	.option("--task <taskId>", "store the image in the task's asset folder")
 	.option("--original", "keep the original file instead of converting to WebP")
-	.option("--plain", "use plain text output")
 	.action(async (file: string, options: { task?: string; original?: boolean }) => {
 		const cwd = await requireProjectRoot();
 		const core = new Core(cwd);
