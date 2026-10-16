@@ -92,6 +92,29 @@ describe("asset upload API", () => {
 		expect(await tooBig.json()).toEqual({ error: "Image is larger than 25 MB" });
 	});
 
+	it("keeps the original when mode is original", async () => {
+		const saved = await (
+			await upload("taskId=TASK-3&name=a.png&mode=original", await pngFixture(8, 8), "image/png")
+		).json();
+		expect(saved.compressed).toBe(false);
+		expect(saved.path.endsWith(".png")).toBe(true);
+	});
+
+	it("rejects an unknown mode with 400", async () => {
+		expect((await upload("mode=bogus", await pngFixture(8, 8), "image/png")).status).toBe(400);
+	});
+
+	it("previews an image without saving it", async () => {
+		const response = await request("/api/assets/preview", {
+			method: "POST",
+			headers: { "Content-Type": "image/png" },
+			body: new Uint8Array(await pngFixture(8, 8)),
+		});
+		expect(response.status).toBe(200);
+		expect(typeof (await response.json()).dataUrl).toBe("string");
+		expect(await (await request("/api/assets")).json()).toEqual([]);
+	});
+
 	it("rejects an image that declares too many pixels with 422", async () => {
 		const bomb = await pngFixture(16, 16);
 		const view = new DataView(bomb.buffer, bomb.byteOffset);

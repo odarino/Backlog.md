@@ -98,4 +98,16 @@ describe("apiClient asset methods", () => {
 		expect(capturedUrl).toContain("/api/assets");
 		expect(capturedUrl).toContain("taskId=TASK-1");
 	});
+
+	it("sends the upload mode and posts previews to the preview endpoint", async () => {
+		const urls: string[] = [];
+		globalThis.fetch = (async (url: string) => {
+			urls.push(String(url));
+			return { ok: true, status: 200, json: async () => ({}) } as Response;
+		}) as unknown as typeof fetch;
+		await apiClient.uploadAsset(new Blob(["x"], { type: "image/png" }), "a", undefined, "original");
+		await apiClient.previewAsset(new Blob(["x"], { type: "image/png" }));
+		expect(urls[0]).toContain("mode=original");
+		expect(urls[1]).toContain("/assets/preview");
+	});
 });

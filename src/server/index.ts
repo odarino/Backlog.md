@@ -2,7 +2,14 @@ import net from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { DEFAULT_STATUSES } from "../constants/index.ts";
-import { AssetError, claimUnsortedAssets, listAssets, MAX_ASSET_BYTES, saveAsset } from "../core/assets.ts";
+import {
+	AssetError,
+	claimUnsortedAssets,
+	listAssets,
+	MAX_ASSET_BYTES,
+	previewAsset,
+	saveAsset,
+} from "../core/assets.ts";
 import { Core, TaskArchiveStatusError } from "../core/backlog.ts";
 import type { ContentStore } from "../core/content-store.ts";
 import { commitDuplicateTaskIdRepair, getDuplicateRepairCommitOptions } from "../core/duplicate-task-repair.ts";
@@ -467,6 +474,9 @@ export class BacklogServer {
 						GET: async (req: Request) => await this.handleListAssets(req),
 						POST: async (req: Request) => await this.handleUploadAsset(req),
 					},
+					"/api/assets/preview": {
+						POST: async (req: Request) => await this.handlePreviewAsset(req),
+					},
 					"/api/docs": {
 						GET: async () => await this.handleListDocs(),
 						POST: async (req: Request) => await this.handleCreateDoc(req),
@@ -733,25 +743,44 @@ export class BacklogServer {
 		return bytes;
 	}
 
-	private async handleUploadAsset(req: Request): Promise<Response> {
-		const tooLarge = () => Response.json({ error: "Image is larger than 25 MB" }, { status: 413 });
+	private async readAssetBody(req: Request): Promise<Uint8Array | null> {
 		// A missing or non-numeric Content-Length is unknown; the body reader counts the bytes anyway.
 		const declaredLength = Number(req.headers.get("content-length") ?? Number.NaN);
-		if (Number.isFinite(declaredLength) && declaredLength > MAX_ASSET_BYTES) return tooLarge();
+		if (Number.isFinite(declaredLength) && declaredLength > MAX_ASSET_BYTES) return null;
+		return await this.readBodyWithLimit(req, MAX_ASSET_BYTES);
+	}
+
+	private async handleUploadAsset(req: Request): Promise<Response> {
 		try {
 			const url = new URL(req.url);
-			const bytes = await this.readBodyWithLimit(req, MAX_ASSET_BYTES);
-			if (!bytes) return tooLarge();
+			const mode = url.searchParams.get("mode") ?? "convert";
+			if (mode !== "convert" && mode !== "original") {
+				return Response.json({ error: "mode must be convert or original" }, { status: 400 });
+			}
+			const bytes = await this.readAssetBody(req);
+			if (!bytes) return Response.json({ error: "Image is larger than 25 MB" }, { status: 413 });
 			const config = await this.core.filesystem.loadConfig();
 			const saved = await saveAsset(this.assetsRoot(), {
 				bytes,
 				name: url.searchParams.get("name") ?? undefined,
 				taskId: url.searchParams.get("taskId"),
 				options: compressOptionsFromConfig(config),
+				mode,
 			});
 			return Response.json(saved);
 		} catch (error) {
 			return this.assetErrorResponse(error, "Failed to save image");
+		}
+	}
+
+	private async handlePreviewAsset(req: Request): Promise<Response> {
+		try {
+			const bytes = await this.readAssetBody(req);
+			if (!bytes) return Response.json({ error: "Image is larger than 25 MB" }, { status: 413 });
+			const config = await this.core.filesystem.loadConfig();
+			return Response.json(await previewAsset(bytes, compressOptionsFromConfig(config)));
+		} catch (error) {
+			return this.assetErrorResponse(error, "Failed to preview image");
 		}
 	}
 

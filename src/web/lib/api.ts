@@ -9,6 +9,7 @@ import type { TaskStatistics } from "../../core/statistics.ts";
 import type { TaskDetail } from "../../core/task-detail.ts";
 import type {
 	AssetEntry,
+	AssetPreview,
 	BacklogConfig,
 	Decision,
 	Document,
@@ -19,6 +20,7 @@ import type {
 	SearchResultType,
 	Task,
 	TaskStatus,
+	UploadMode,
 } from "../../types/index.ts";
 
 const API_BASE = "/api";
@@ -470,8 +472,8 @@ export class ApiClient {
 		return this.fetchJson<AssetEntry[]>(`${API_BASE}/assets${query}`);
 	}
 
-	async uploadAsset(file: Blob, name: string, taskId?: string): Promise<SavedAsset> {
-		const params = new URLSearchParams({ name });
+	async uploadAsset(file: Blob, name: string, taskId?: string, mode: UploadMode = "convert"): Promise<SavedAsset> {
+		const params = new URLSearchParams({ name, mode });
 		if (taskId) params.set("taskId", taskId);
 		// Raw body upload: fetchWithRetry forces a JSON content type, so use fetch directly.
 		const response = await fetch(`${API_BASE}/assets?${params.toString()}`, {
@@ -483,6 +485,18 @@ export class ApiClient {
 			throw await toApiError(response, "Failed to upload image");
 		}
 		return (await response.json()) as SavedAsset;
+	}
+
+	async previewAsset(file: Blob): Promise<AssetPreview> {
+		const response = await fetch(`${API_BASE}/assets/preview`, {
+			method: "POST",
+			headers: { "Content-Type": file.type || "application/octet-stream" },
+			body: file,
+		});
+		if (!response.ok) {
+			throw await toApiError(response, "Failed to preview image");
+		}
+		return (await response.json()) as AssetPreview;
 	}
 
 	async updateConfig(config: BacklogConfig): Promise<BacklogConfig> {
