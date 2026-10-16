@@ -45,7 +45,7 @@ describe("asset add", () => {
 	});
 
 	it("prints markdown from the CLI", async () => {
-		const result = await $`bun ${CLI_PATH} asset add ${pngPath} --original --plain`.cwd(TEST_DIR).quiet();
+		const result = await $`bun ${CLI_PATH} asset add ${pngPath} --original`.cwd(TEST_DIR).quiet();
 		expect(result.stdout.toString()).toContain("![");
 	});
 });

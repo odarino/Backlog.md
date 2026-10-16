@@ -58,21 +58,19 @@ function isDataTransfer(source: unknown): source is DataTransfer {
 export function imageFilesFrom(source: DataTransfer | FileList | File[] | null | undefined): File[] {
 	const candidates: File[] = [];
 	if (isDataTransfer(source)) {
-		candidates.push(...Array.from(source.files ?? []));
+		const fromFiles = Array.from(source.files ?? []);
+		const fromItems: File[] = [];
 		for (const item of Array.from(source.items ?? [])) {
 			if (item.kind !== "file") continue;
 			const file = item.getAsFile();
-			if (file) candidates.push(file);
+			if (file) fromItems.push(file);
 		}
+		candidates.push(...(fromFiles.length ? fromFiles : fromItems));
 	} else {
 		candidates.push(...Array.from(source ?? []));
 	}
-	const seen = new Set<string>();
 	const result: File[] = [];
 	for (const candidate of candidates) {
-		const key = `${candidate.name}|${candidate.size}|${candidate.lastModified}`;
-		if (seen.has(key)) continue;
-		seen.add(key);
 		const file = withImageType(candidate);
 		if (file) result.push(file);
 	}

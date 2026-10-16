@@ -86,13 +86,20 @@ describe("imageFilesFrom", () => {
 		expect(imageFilesFrom(transfer)).toEqual([png]);
 	});
 
-	it("returns a file once when files and items both expose it", () => {
+	it("uses files only when files and items are both present", () => {
 		const png = new File([new Uint8Array([1])], "image.png", { type: "image/png", lastModified: 5 });
+		const dup = new File([new Uint8Array([1])], "image.png", { type: "image/png", lastModified: 99 });
 		const transfer = {
 			files: [png] as unknown as FileList,
-			items: [{ kind: "file", getAsFile: () => png }] as unknown as DataTransferItemList,
+			items: [{ kind: "file", getAsFile: () => dup }] as unknown as DataTransferItemList,
 		} as DataTransfer;
-		expect(imageFilesFrom(transfer)).toHaveLength(1);
+		expect(imageFilesFrom(transfer)).toEqual([png]);
+	});
+
+	it("reads a DataTransfer with files but no items property", () => {
+		const png = new File([new Uint8Array([1])], "image.png", { type: "image/png" });
+		const transfer = { files: [png] as unknown as FileList } as DataTransfer;
+		expect(imageFilesFrom(transfer)).toEqual([png]);
 	});
 });
 

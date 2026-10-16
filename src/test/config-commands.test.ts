@@ -595,5 +595,6 @@ describe("Config commands", () => {
 		expect(after.trim()).toBe("random");
 		const bad = await $`bun ${CLI_PATH} config set taskIdMode foo`.cwd(dir).nothrow().quiet();
 		expect(bad.exitCode).toBe(1);
+		await $`bun ${CLI_PATH} config set taskIdMode sequential`.cwd(dir).quiet();
 	});
 });
