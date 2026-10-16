@@ -22,6 +22,7 @@ import { registerMcpCommand } from "./commands/mcp.ts";
 import { pickTaskForEditWizard, runTaskCreateWizard, runTaskEditWizard } from "./commands/task-wizard.ts";
 import { watchJson } from "./commands/watch-json.ts";
 import { DEFAULT_DIRECTORIES, DEFAULT_FILES, DEFAULT_STATUSES } from "./constants/index.ts";
+import { addAssetFromFile } from "./core/asset-add.ts";
 import {
 	commitDuplicateTaskIdRepair,
 	type DuplicateRepairChange,
@@ -176,6 +177,7 @@ const CONFIG_GET_KEYS = [
 	"filesystemOnly",
 	"bypassGitHooks",
 	"zeroPaddedIds",
+	"taskIdMode",
 	"checkActiveBranches",
 	"activeBranchDays",
 ] as const;
@@ -194,6 +196,7 @@ const CONFIG_SET_KEYS = [
 	"filesystemOnly",
 	"bypassGitHooks",
 	"zeroPaddedIds",
+	"taskIdMode",
 	"checkActiveBranches",
 	"activeBranchDays",
 ] as const;
@@ -4754,6 +4757,27 @@ addHelpSchema(docCmd.command("create <title>"), {
 		}
 	});
 
+const assetCmd = program.command("asset").description("Manage image assets");
+
+assetCmd
+	.command("add <file>")
+	.description("Add an image asset and print its markdown")
+	.option("--task <taskId>", "store the image in the task's asset folder")
+	.option("--original", "keep the original file instead of converting to WebP")
+	.action(async (file: string, options: { task?: string; original?: boolean }) => {
+		const cwd = await requireProjectRoot();
+		const core = new Core(cwd);
+		try {
+			const saved = await addAssetFromFile(core, { path: file, taskId: options.task, original: options.original });
+			console.log(`Saved: ${saved.path}`);
+			console.log(`Size: ${saved.originalSize} -> ${saved.finalSize} bytes`);
+			console.log(saved.markdown);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			process.exit(1);
+		}
+	});
+
 addHelpSchema(docCmd.command("update <docId>"), {
 	required: [{ name: "docId", type: "Document ID", description: "Document to update" }],
 	optional: [
@@ -5086,7 +5110,7 @@ agentsCmd
 
 // Config command group
 const CONFIG_AVAILABLE_KEYS =
-	"Available keys: defaultEditor, projectName, defaultAssignee, defaultStatus, statuses, labels, priorities, types, projects, milestones, definitionOfDone, dateFormat, maxColumnWidth, defaultPort, autoOpenBrowser, hideEmptyColumns, remoteOperations, autoCommit, filesystemOnly, bypassGitHooks, zeroPaddedIds, checkActiveBranches, activeBranchDays";
+	"Available keys: defaultEditor, projectName, defaultAssignee, defaultStatus, statuses, labels, priorities, types, projects, milestones, definitionOfDone, dateFormat, maxColumnWidth, defaultPort, autoOpenBrowser, hideEmptyColumns, remoteOperations, autoCommit, filesystemOnly, bypassGitHooks, zeroPaddedIds, taskIdMode, checkActiveBranches, activeBranchDays";
 
 const configCmd = addHelpSchema(program.command("config"), {
 	reads: "Project Backlog.md configuration",
@@ -5269,6 +5293,9 @@ addHelpSchema(configCmd.command("get <key>"), {
 				case "bypassGitHooks":
 					console.log(config.bypassGitHooks?.toString() || "");
 					break;
+				case "taskIdMode":
+					console.log(config.taskIdMode ?? "sequential");
+					break;
 				case "zeroPaddedIds":
 					console.log(config.zeroPaddedIds?.toString() || "(disabled)");
 					break;
@@ -5436,6 +5463,14 @@ addHelpSchema(configCmd.command("set <key> <value>"), {
 						console.error("bypassGitHooks must be true or false");
 						process.exit(1);
 					}
+					break;
+				}
+				case "taskIdMode": {
+					if (value !== "sequential" && value !== "random") {
+						console.error("taskIdMode must be sequential or random.");
+						process.exit(1);
+					}
+					config.taskIdMode = value === "random" ? "random" : undefined;
 					break;
 				}
 				case "zeroPaddedIds": {

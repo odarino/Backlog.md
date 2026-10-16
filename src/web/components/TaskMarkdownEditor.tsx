@@ -1,5 +1,6 @@
 import MDEditor, { commands as mdCommands, type ICommand } from "@uiw/react-md-editor";
-import { type ClipboardEvent, type DragEvent, useEffect, useRef, useState } from "react";
+import { type ClipboardEvent, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { UploadMode } from "../../types";
 import { apiClient } from "../lib/api";
 import {
 	fileNameFromPath,
@@ -11,6 +12,7 @@ import {
 	uploadToastMessage,
 } from "../lib/markdown-image-insert";
 import AssetPickerModal from "./AssetPickerModal";
+import ImageUploadDialog from "./ImageUploadDialog";
 import { SuccessToast } from "./SuccessToast";
 
 interface Props {
@@ -43,15 +45,18 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 	const queueRef = useRef<Promise<void>>(Promise.resolve());
 	const [toast, setToast] = useState<Toast | null>(null);
 	const [pickerOpen, setPickerOpen] = useState(false);
+	const [pending, setPending] = useState<{ uploads: PendingUpload[]; start: number; end: number } | null>(null);
+	const pendingFiles = useMemo(() => pending?.uploads.map((upload) => upload.file) ?? [], [pending]);
 	const selectionRef = useRef({ start: value.length, end: value.length });
 	const onOverlayChangeRef = useRef(onOverlayChange);
 	onOverlayChangeRef.current = onOverlayChange;
 	const pickerOpenRef = useRef(false);
+	const overlayOpen = pickerOpen || pending !== null;
 
 	useEffect(() => {
-		pickerOpenRef.current = pickerOpen;
-		onOverlayChangeRef.current?.(pickerOpen);
-	}, [pickerOpen]);
+		pickerOpenRef.current = overlayOpen;
+		onOverlayChangeRef.current?.(overlayOpen);
+	}, [overlayOpen]);
 
 	// If the editor unmounts while the picker is open, the parent must not stay in "overlay open".
 	useEffect(
@@ -72,16 +77,14 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 		onChangeRef.current(next);
 	};
 
-	const startUploads = (uploads: PendingUpload[], textarea: HTMLTextAreaElement) => {
+	const startUploads = (uploads: PendingUpload[], start: number, end: number, mode: UploadMode) => {
 		const placeholders = uploads.map((upload) => uploadPlaceholder(upload.label));
-		commit(
-			insertAtSelection(valueRef.current, textarea.selectionStart, textarea.selectionEnd, placeholders.join("\n")).value,
-		);
+		commit(insertAtSelection(valueRef.current, start, end, placeholders.join("\n")).value);
 		uploads.forEach((upload, index) => {
 			const marker = placeholders[index] as string;
 			queueRef.current = queueRef.current.then(async () => {
 				try {
-					const saved = await apiClient.uploadAsset(upload.file, upload.uploadName, taskId);
+					const saved = await apiClient.uploadAsset(upload.file, upload.uploadName, taskId, mode);
 					commit(replaceFirst(valueRef.current, marker, imageMarkdown(fileNameFromPath(saved.path), saved.path)));
 					setToast({ message: uploadToastMessage(saved), tone: "success" });
 				} catch (error) {
@@ -92,11 +95,15 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 		});
 	};
 
+	const requestUploads = (uploads: PendingUpload[], textarea: HTMLTextAreaElement) => {
+		setPending({ uploads, start: textarea.selectionStart, end: textarea.selectionEnd });
+	};
+
 	const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-		const files = imageFilesFrom(event.clipboardData?.files);
+		const files = imageFilesFrom(event.clipboardData);
 		if (files.length === 0) return;
 		event.preventDefault();
-		startUploads(
+		requestUploads(
 			files.map((file) => ({ file, uploadName: "", label: "pasted image" })),
 			event.currentTarget,
 		);
@@ -109,9 +116,9 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 	const handleDrop = (event: DragEvent<HTMLTextAreaElement>) => {
 		// A file drop that is not prevented makes the browser open the file and lose the edits.
 		if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
-		const files = imageFilesFrom(event.dataTransfer?.files);
+		const files = imageFilesFrom(event.dataTransfer);
 		if (files.length === 0) return;
-		startUploads(
+		requestUploads(
 			files.map((file) => ({ file, uploadName: file.name, label: file.name })),
 			event.currentTarget,
 		);
@@ -160,6 +167,14 @@ export default function TaskMarkdownEditor({ value, onChange, taskId, height, co
 					commit(insertAtSelection(valueRef.current, start, end, markdown).value);
 				}}
 				onUploaded={(saved) => setToast({ message: uploadToastMessage(saved), tone: "success" })}
+			/>
+			<ImageUploadDialog
+				files={pendingFiles}
+				onCancel={() => setPending(null)}
+				onConfirm={(mode) => {
+					if (pending) startUploads(pending.uploads, pending.start, pending.end, mode);
+					setPending(null);
+				}}
 			/>
 		</>
 	);

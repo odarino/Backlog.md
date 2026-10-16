@@ -28,6 +28,7 @@ Mark finished work Done (or the configured final status). Leave it on the board 
 - `task_list` and `task_search` also accept configured `project` values with OR semantics for monorepo-style backlogs; the field is absent from both tool schemas when no `projects:` list is configured
 - `task_edit` accepts `commentsAppend` and optional `commentAuthor` to append task discussion or review comments
 - Comment bodies may contain Markdown, but standalone `---` lines are reserved as comment delimiters
+- `asset_add` (`path`, optional `taskId`, optional `original`)
 - `document_list`, `document_view`, `document_create`, `document_update`, `document_search`
 - `document_create` and `document_update` support docs-directory-relative `path` values such as `guides/setup`; absolute paths and `..` traversal are rejected
 - `definition_of_done_defaults_get`, `definition_of_done_defaults_upsert`

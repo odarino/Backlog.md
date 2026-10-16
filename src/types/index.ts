@@ -351,6 +351,7 @@ export interface BacklogConfig {
 	/** Disable all Git integration for filesystem-only projects. */
 	filesystemOnly?: boolean;
 	zeroPaddedIds?: number;
+	taskIdMode?: "sequential" | "random";
 	includeDateTimeInDates?: boolean; // Whether to include time in new dates
 	bypassGitHooks?: boolean;
 	checkActiveBranches?: boolean; // Check task states across active branches (default: true)
@@ -401,6 +402,16 @@ export interface AssetEntry {
 
 export interface SavedAsset {
 	path: string;
+	originalSize: number;
+	finalSize: number;
+	compressed: boolean;
+}
+
+export type UploadMode = "convert" | "original";
+
+export interface AssetPreview {
+	dataUrl: string;
+	mime: string;
 	originalSize: number;
 	finalSize: number;
 	compressed: boolean;
