@@ -1,7 +1,8 @@
 import net from "node:net";
-import { dirname, isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { DEFAULT_STATUSES } from "../constants/index.ts";
+import { assetsRootFor } from "../core/asset-add.ts";
 import {
 	AssetError,
 	claimUnsortedAssets,
@@ -698,7 +699,7 @@ export class BacklogServer {
 	}
 
 	private assetsRoot(): string {
-		return join(dirname(this.core.filesystem.docsDir), "assets");
+		return assetsRootFor(this.core);
 	}
 
 	private assetErrorResponse(error: unknown, fallback: string): Response {

@@ -22,6 +22,7 @@ import { registerMcpCommand } from "./commands/mcp.ts";
 import { pickTaskForEditWizard, runTaskCreateWizard, runTaskEditWizard } from "./commands/task-wizard.ts";
 import { watchJson } from "./commands/watch-json.ts";
 import { DEFAULT_DIRECTORIES, DEFAULT_FILES, DEFAULT_STATUSES } from "./constants/index.ts";
+import { addAssetFromFile } from "./core/asset-add.ts";
 import {
 	commitDuplicateTaskIdRepair,
 	type DuplicateRepairChange,
@@ -4751,6 +4752,28 @@ addHelpSchema(docCmd.command("create <title>"), {
 		console.log(`Created document ${document.id}`);
 		if (document.path) {
 			console.log(`Path: ${core.filesystem.backlogDirName}/docs/${document.path}`);
+		}
+	});
+
+const assetCmd = program.command("asset").description("Manage image assets");
+
+assetCmd
+	.command("add <file>")
+	.description("Add an image asset and print its markdown")
+	.option("--task <taskId>", "store the image in the task's asset folder")
+	.option("--original", "keep the original file instead of converting to WebP")
+	.option("--plain", "use plain text output")
+	.action(async (file: string, options: { task?: string; original?: boolean }) => {
+		const cwd = await requireProjectRoot();
+		const core = new Core(cwd);
+		try {
+			const saved = await addAssetFromFile(core, { path: file, taskId: options.task, original: options.original });
+			console.log(`Saved: ${saved.path}`);
+			console.log(`Size: ${saved.originalSize} -> ${saved.finalSize} bytes`);
+			console.log(saved.markdown);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			process.exit(1);
 		}
 	});
 
