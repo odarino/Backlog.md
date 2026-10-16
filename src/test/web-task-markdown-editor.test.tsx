@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -89,6 +89,13 @@ const pasteFiles = async (target: HTMLTextAreaElement, files: File[]) => {
 	return event;
 };
 
+const clickButton = async (name: string) => {
+	const button = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === name) as HTMLButtonElement;
+	await act(async () => {
+		button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+	});
+};
+
 const flush = async () => {
 	await act(async () => {
 		await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -97,8 +104,53 @@ const flush = async () => {
 
 describe("TaskMarkdownEditor uploads", () => {
 	const originalUpload = apiClient.uploadAsset.bind(apiClient);
+	const originalPreview = apiClient.previewAsset.bind(apiClient);
+	beforeEach(() => {
+		apiClient.previewAsset = async () => ({
+			dataUrl: "data:image/webp;base64,AA==",
+			mime: "image/webp",
+			originalSize: 10,
+			finalSize: 5,
+			compressed: true,
+		});
+	});
 	afterEach(() => {
 		apiClient.uploadAsset = originalUpload;
+		apiClient.previewAsset = originalPreview;
+	});
+
+	it("opens the dialog on paste, uploads with the chosen mode on Insert", async () => {
+		const modes: unknown[] = [];
+		apiClient.uploadAsset = async (_file, _name, _taskId, mode) => {
+			modes.push(mode);
+			return { path: "/assets/images/task-5/p.webp", originalSize: 10, finalSize: 5, compressed: true };
+		};
+		const values: string[] = [];
+		const { textarea } = await renderEditor((value) => values.push(value), "TASK-5");
+		await pasteFiles(textarea, [new File(["x"], "image.png", { type: "image/png" })]);
+		await flush();
+		expect(values).toEqual([]);
+		await clickButton("Insert");
+		await flush();
+		expect(modes).toEqual(["convert"]);
+		expect(values.at(-1)).toBe("Hello ![p](/assets/images/task-5/p.webp)");
+	});
+
+	it("Cancel leaves the value unchanged and uploads nothing", async () => {
+		let uploads = 0;
+		apiClient.uploadAsset = async () => {
+			uploads += 1;
+			throw new Error("should not upload");
+		};
+		const values: string[] = [];
+		const { textarea } = await renderEditor((value) => values.push(value));
+		await pasteFiles(textarea, [new File(["x"], "image.png", { type: "image/png" })]);
+		await flush();
+		await clickButton("Cancel");
+		await flush();
+		expect(values).toEqual([]);
+		expect(uploads).toBe(0);
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
 	});
 
 	it("inserts a placeholder at the cursor, then the uploaded image link and a toast", async () => {
@@ -112,6 +164,8 @@ describe("TaskMarkdownEditor uploads", () => {
 
 		const event = await pasteFiles(textarea, [new File(["x"], "image.png", { type: "image/png" })]);
 		expect(event.defaultPrevented).toBe(true);
+		await flush();
+		await clickButton("Insert");
 		expect(values[0]).toMatch(/^Hello !\[Uploading pasted image…\]\(uploading:[a-z0-9-]+\)$/);
 
 		await flush();
@@ -127,6 +181,8 @@ describe("TaskMarkdownEditor uploads", () => {
 		const values: string[] = [];
 		const { container, textarea } = await renderEditor((value) => values.push(value));
 		await pasteFiles(textarea, [new File(["x"], "big.png", { type: "image/png" })]);
+		await flush();
+		await clickButton("Insert");
 		await flush();
 		expect(values.at(-1)).toBe("Hello ");
 		expect(container.textContent).toContain("Image is larger than 25 MB");
@@ -151,6 +207,8 @@ describe("TaskMarkdownEditor uploads", () => {
 		await act(async () => {
 			textarea.dispatchEvent(drop);
 		});
+		await flush();
+		await clickButton("Insert");
 		await flush();
 		await flush();
 		expect(order).toEqual(["one.png", "two.png"]);
