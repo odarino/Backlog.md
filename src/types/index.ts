@@ -405,3 +405,13 @@ export interface SavedAsset {
 	finalSize: number;
 	compressed: boolean;
 }
+
+export type UploadMode = "convert" | "original";
+
+export interface AssetPreview {
+	dataUrl: string;
+	mime: string;
+	originalSize: number;
+	finalSize: number;
+	compressed: boolean;
+}
