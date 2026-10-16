@@ -1,9 +1,11 @@
 ---
 id: BACK-711
 title: Fix image paste into task rich-text fields on Windows
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-16 13:54'
+updated_date: '2026-10-16 14:00'
 labels:
   - web
   - bug

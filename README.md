@@ -29,6 +29,8 @@ Homebrew and Nix install the upstream package, which does not have the fork feat
 
 - **Image zoom.** Click an image in a task, a document, or a decision to open it full screen. Zoom with the mouse wheel, a double-click, or a pinch. Drag to pan. Use the arrow keys to move between all images of the task.
 - **Image upload, paste, and drag-drop.** Paste a screenshot or drop image files into any task editor. The server compresses each image to WebP and saves it under `backlog/assets/images/<task-id>/`. Images that you add before a task has an ID go to `_unsorted/`, and they move to the task folder when you create the task. An image that another task also links is copied, not moved.
+- **Image upload mode.** A dialog shows a preview of each image and lets you choose to convert it to WebP or keep the original. From the CLI, run `backlog asset add <file> [--task <id>] [--original]`. MCP uses `asset_add`.
+- **Random task IDs.** Set `taskIdMode` to `random` (`backlog config set taskIdMode random`) to give new tasks a random 6-digit ID (100000-999999). The default is `sequential`. The mode applies to tasks only. Subtasks keep the `.1` form.
 - **Image picker.** The image button in the editor toolbar opens a picker. Search, select, and insert existing images, or upload new ones.
 - **Workflow editor.** In Settings, add, rename, reorder, color, and delete statuses. A rename or delete rewrites the affected tasks in `tasks/`, `completed/`, and `archive/tasks/`. Status colors show on the board columns and in the task list.
 - **Clone task.** Copy a task into a new one from the task view (**Clone**), the CLI (`backlog task clone <id> [--title <title>]`), or MCP (`task_clone`). The copy keeps the content, labels, links, and checklists (unchecked), and resets the status (drafts stay drafts), due date, notes, summary, and comments.
@@ -355,7 +357,7 @@ Full help: `backlog --help`
 
 Backlog.md works with zero configuration. Settings merge from CLI flags, then the project config file (`backlog.config.yml` when present, otherwise `backlog/config.yml` or `.backlog/config.yml`), then built‑in defaults.
 
-Run `backlog config` with no arguments to launch the interactive wizard (the same experience triggered from `backlog init` advanced setup). It walks through cross-branch accuracy (`checkActiveBranches`, `remoteOperations`, `activeBranchDays`), Git workflow (`autoCommit`, `bypassGitHooks`), ID formatting (`zeroPaddedIds`), editor integration (`defaultEditor`), Definition of Done defaults, and Web UI defaults (`defaultPort`, `autoOpenBrowser`). Skipping the wizard applies the safe built-in defaults, and rerunning `backlog init` or `backlog config` pre-populates prompts with your current values.
+Run `backlog config` with no arguments to launch the interactive wizard (the same experience triggered from `backlog init` advanced setup). It walks through cross-branch accuracy (`checkActiveBranches`, `remoteOperations`, `activeBranchDays`), Git workflow (`autoCommit`, `bypassGitHooks`), ID formatting (`zeroPaddedIds`, `taskIdMode`), editor integration (`defaultEditor`), Definition of Done defaults, and Web UI defaults (`defaultPort`, `autoOpenBrowser`). Skipping the wizard applies the safe built-in defaults, and rerunning `backlog init` or `backlog config` pre-populates prompts with your current values.
 
 For filesystem-only projects (`backlog init --no-git`), the saved config forces `checkActiveBranches=false`, `remoteOperations=false`, and `autoCommit=false` so CLI, Web, and MCP local-file workflows do not depend on a Git repository.
 

@@ -1,9 +1,11 @@
 ---
 id: BACK-713
 title: Optional random numeric task IDs
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-16 13:54'
+updated_date: '2026-10-16 14:12'
 labels:
   - core
   - config
