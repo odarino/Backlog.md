@@ -74,11 +74,16 @@ describe("release configuration", () => {
 		it("is safe to re-run", async () => {
 			const jobs = await loadJobs();
 			expect(jobs["publish-binaries"]?.strategy?.["fail-fast"]).toBe(false);
-			const realPublishSteps = Object.values(jobs)
+			const publishSteps = Object.values(jobs)
 				.flatMap((job) => job.steps)
-				.filter((step) => step.run?.includes("npm publish") && !step.run.includes("--dry-run"));
-			expect(realPublishSteps.length).toBe(2);
-			for (const step of realPublishSteps) expect(step.run).toContain("already published; skipping");
+				.filter((step) => step.run?.includes("npm publish"));
+			expect(publishSteps.length).toBe(2);
+			for (const step of publishSteps) {
+				const run = step.run ?? "";
+				// The dry run fails for an existing version, so the skip check must come first.
+				expect(run.indexOf("already published; skipping")).toBeGreaterThan(-1);
+				expect(run.indexOf("already published; skipping")).toBeLessThan(run.indexOf("--dry-run"));
+			}
 		});
 	});
 });
