@@ -12,6 +12,10 @@ describe("haren plugin package files", () => {
 		expect(m.version).toBeUndefined();
 		expect(Object.keys(m.hooks).sort()).toEqual(["after-plan", "on-task-status", "session-start"]);
 		for (const cmd of Object.values(m.hooks)) expect(cmd).toMatch(/^backlog haren-hook /);
+		expect(m.setup).toHaveLength(1);
+		expect(m.setup[0]).toContain("--no-git");
+		expect(m.setup[0]).toContain("git rev-parse");
+		expect(m.setup[0]).toContain("{{project}}");
 		for (const s of m.skills) expect(existsSync(join(root, s, "SKILL.md"))).toBe(true);
 	});
 	it("ships the plugin files in npm and release builds", async () => {
@@ -20,5 +24,6 @@ describe("haren plugin package files", () => {
 		const release = await Bun.file(join(root, ".github/workflows/release.yml")).text();
 		expect(release).toContain('"haren-plugin.json"');
 		expect(release).toContain("--tag next");
+		expect(release.split("$NPM_TAG").length - 1).toBeGreaterThanOrEqual(4);
 	});
 });
