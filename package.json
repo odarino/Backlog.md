@@ -5,6 +5,8 @@
   "module": "src/cli.ts",
   "files": [
     "scripts/*.cjs",
+    "haren-plugin.json",
+    "skills/",
     "README.md",
     "LICENSE"
   ],

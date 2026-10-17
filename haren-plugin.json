@@ -1,0 +1,14 @@
+{
+	"name": "backlog",
+	"harenApi": "1",
+	"description": "Two-way sync between haren tasks and a Backlog.md board",
+	"requires": [{ "bin": "backlog", "version": ">=1.57.0-0", "install": "npm i -g @odarino/backlog.md" }],
+	"setup": ["backlog init \"{{project}}\" --defaults"],
+	"hooks": {
+		"session-start": "backlog haren-hook session-start",
+		"after-plan": "backlog haren-hook after-plan",
+		"on-task-status": "backlog haren-hook on-task-status"
+	},
+	"config": {},
+	"skills": ["skills/haren-board"]
+}

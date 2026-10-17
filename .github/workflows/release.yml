@@ -111,6 +111,8 @@ jobs:
           cp scripts/resolveBinary.cjs dist/resolveBinary.cjs
           cp scripts/postuninstall.cjs dist/postuninstall.cjs
           chmod +x dist/cli.js
+          cp haren-plugin.json dist/haren-plugin.json
+          mkdir -p dist/skills && cp -R skills/. dist/skills/
       - name: Create npm-ready package.json
         shell: bash
         run: |
@@ -118,7 +120,7 @@ jobs:
           jq 'del(.devDependencies,.scripts.prepare,.scripts.preinstall,.type) |
               .version = "'$TAG'" |
               .bin = {backlog:"cli.js"} |
-              .files = ["cli.js","resolveBinary.cjs","postuninstall.cjs","package.json","README.md","LICENSE"] |
+              .files = ["cli.js","resolveBinary.cjs","postuninstall.cjs","package.json","README.md","LICENSE","haren-plugin.json","skills/"] |
               .scripts = {"postuninstall": "node postuninstall.cjs"} |
               .repository = {"type":"git","url":"https://github.com/odarino/Backlog.md"} |
               .optionalDependencies |= map_values("'$TAG'")' package.json > dist/package.json
@@ -144,8 +146,9 @@ jobs:
             echo "$NAME@$VERSION is already published; skipping"
             exit 0
           fi
-          npm publish --access public --provenance --dry-run
-          npm publish --access public --provenance
+          NPM_TAG=$([[ "${GITHUB_REF##refs/tags/v}" == *-* ]] && echo "--tag next" || echo "")
+          npm publish --access public --provenance $NPM_TAG --dry-run
+          npm publish --access public --provenance $NPM_TAG
 
   publish-binaries:
     needs: build
@@ -248,8 +251,9 @@ jobs:
             echo "$NAME@$VERSION is already published; skipping"
             exit 0
           fi
-          npm publish --access public --provenance --dry-run
-          npm publish --access public --provenance
+          NPM_TAG=$([[ "${GITHUB_REF##refs/tags/v}" == *-* ]] && echo "--tag next" || echo "")
+          npm publish --access public --provenance $NPM_TAG --dry-run
+          npm publish --access public --provenance $NPM_TAG
 
   verify-platform-packages:
     name: verify-platform-packages-${{ matrix.os }}
