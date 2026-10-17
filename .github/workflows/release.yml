@@ -133,12 +133,6 @@ jobs:
           set -euo pipefail
           npm install -g npm@11.6.0
           npm --version
-      - name: Dry run publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd dist
-          npm publish --access public --provenance --dry-run
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -150,6 +144,7 @@ jobs:
             echo "$NAME@$VERSION is already published; skipping"
             exit 0
           fi
+          npm publish --access public --provenance --dry-run
           npm publish --access public --provenance
 
   publish-binaries:
@@ -242,12 +237,6 @@ jobs:
           set -euo pipefail
           npm install -g npm@11.6.0
           npm --version
-      - name: Dry run platform publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd pkg
-          npm publish --access public --provenance --dry-run
       - name: Publish platform package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -259,6 +248,7 @@ jobs:
             echo "$NAME@$VERSION is already published; skipping"
             exit 0
           fi
+          npm publish --access public --provenance --dry-run
           npm publish --access public --provenance
 
   verify-platform-packages:
