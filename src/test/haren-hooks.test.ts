@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Core } from "../core/backlog.ts";
@@ -58,6 +58,85 @@ describe("after-plan", () => {
 		expect(after.find((t) => t.id === apiId)?.title).toBe("API v2");
 		expect(after.find((t) => t.id === uiId)).toBeUndefined();
 		expect((await loadState(env.dataDir)).tasks["checkout/task-2-ui"]).toBeUndefined();
+	});
+});
+
+describe("after-plan robustness", () => {
+	const twoTaskPlan = plan([
+		{ key: "task-1-api", title: "API", description: "", dependencies: [] },
+		{ key: "task-2-ui", title: "UI", description: "", dependencies: ["task-1-api"] },
+	]);
+	it("recreates a task deleted from the board and links dependents to it", async () => {
+		await runHarenHook(
+			"after-plan",
+			plan([{ key: "task-1-api", title: "API", description: "", dependencies: [] }]),
+			env,
+		);
+		const oldId = (await loadState(env.dataDir)).tasks["checkout/task-1-api"]?.backlogId as string;
+		await rm(join(dir, "backlog", "tasks", "task-1 - API.md"));
+		const r = await runHarenHook("after-plan", twoTaskPlan, env);
+		expect(r.messages.join("\n")).toContain(`Recreated checkout/task-1-api: ${oldId} was missing on the board`);
+		const state = await loadState(env.dataDir);
+		const apiId = state.tasks["checkout/task-1-api"]?.backlogId as string;
+		const uiId = state.tasks["checkout/task-2-ui"]?.backlogId as string;
+		const tasks = await core.filesystem.listTasks();
+		expect(tasks.find((t) => t.id === uiId)?.dependencies).toEqual([apiId]);
+	});
+	it("does not abort when a mapped task was archived on the board", async () => {
+		await runHarenHook(
+			"after-plan",
+			plan([{ key: "task-1-api", title: "API", description: "", dependencies: [] }]),
+			env,
+		);
+		const oldId = (await loadState(env.dataDir)).tasks["checkout/task-1-api"]?.backlogId as string;
+		await core.archiveTask(oldId, false);
+		const r = await runHarenHook("after-plan", twoTaskPlan, env);
+		expect(r.messages.join("\n")).toContain(`Recreated checkout/task-1-api: ${oldId} was missing on the board`);
+		const state = await loadState(env.dataDir);
+		expect(state.tasks["checkout/task-1-api"]).toBeDefined();
+		expect(state.tasks["checkout/task-2-ui"]).toBeDefined();
+	});
+	it("drops a removed task that is already gone from the board", async () => {
+		await runHarenHook(
+			"after-plan",
+			plan([{ key: "task-1-api", title: "API", description: "", dependencies: [] }]),
+			env,
+		);
+		const id = (await loadState(env.dataDir)).tasks["checkout/task-1-api"]?.backlogId as string;
+		await core.archiveTask(id, false);
+		const r = await runHarenHook("after-plan", plan([]), env);
+		expect(r.messages.join("\n")).toContain(`${id} already missing; dropped checkout/task-1-api`);
+	});
+	it("links a forward reference on the first sync", async () => {
+		await runHarenHook(
+			"after-plan",
+			plan([
+				{ key: "task-2-ui", title: "UI", description: "", dependencies: ["task-1-api"] },
+				{ key: "task-1-api", title: "API", description: "", dependencies: [] },
+			]),
+			env,
+		);
+		const state = await loadState(env.dataDir);
+		const apiId = state.tasks["checkout/task-1-api"]?.backlogId as string;
+		const uiId = state.tasks["checkout/task-2-ui"]?.backlogId as string;
+		expect((await core.filesystem.listTasks()).find((t) => t.id === uiId)?.dependencies).toEqual([apiId]);
+	});
+});
+
+describe("project resolution", () => {
+	it("does not walk up to a parent project", async () => {
+		const child = join(dir, "child");
+		await mkdir(child, { recursive: true });
+		const r = await runHarenHook(
+			"session-start",
+			{ hook: "session-start" },
+			{ root: child, dataDir: join(dir, ".d3") },
+		);
+		expect(r.messages[0]).toContain("No Backlog.md project found");
+	});
+	it("reports a missing root", async () => {
+		const r = await runHarenHook("session-start", { hook: "session-start" }, { dataDir: join(dir, ".d4") });
+		expect(r.messages[0]).toContain("No Backlog.md project found");
 	});
 });
 
