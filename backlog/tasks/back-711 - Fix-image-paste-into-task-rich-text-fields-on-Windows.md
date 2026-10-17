@@ -1,11 +1,11 @@
 ---
 id: BACK-711
 title: Fix image paste into task rich-text fields on Windows
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-16 13:54'
-updated_date: '2026-10-16 14:35'
+updated_date: '2026-10-17 03:24'
 labels:
   - web
   - bug
@@ -23,7 +23,7 @@ Pasting a screenshot (Snipping Tool) or an image file copied from Explorer into 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pasting a Snipping Tool screenshot into Description on create and edit inserts the image
+- [x] #1 Pasting a Snipping Tool screenshot into Description on create and edit inserts the image
 - [x] #2 Pasting an image file copied from Explorer with an empty MIME type inserts the image
 - [x] #3 Images exposed only via clipboard items are picked up; duplicates are inserted once
 - [x] #4 Unit tests cover empty type, items-only, and duplicate cases
@@ -35,6 +35,12 @@ Pasting a screenshot (Snipping Tool) or an image file copied from Explorer into 
 - [x] #2 bun run check . passes when formatting/linting touched
 - [x] #3 bun test (or scoped test) passes
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Manual check passed: Snipping Tool paste on Windows inserts the image (tested via SSH tunnel to the local server). Shipped in v1.56.1.
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
