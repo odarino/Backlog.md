@@ -1,0 +1,22 @@
+{
+	"name": "backlog",
+	"harenApi": "1",
+	"description": "Two-way sync between haren tasks and a Backlog.md board",
+	"requires": [
+		{
+			"bin": "backlog",
+			"version": ">=1.57.0-0",
+			"install": "npm i -g @odarino/backlog.md"
+		}
+	],
+	"setup": [
+		"sh -c 'if [ -f backlog/config.yml ] || [ -f backlog/config.yaml ] || [ -f .backlog/config.yml ] || [ -f .backlog/config.yaml ] || [ -f backlog.config.yml ] || [ -f backlog.json ]; then exit 0; fi; if git rev-parse --git-dir >/dev/null 2>&1; then backlog init \"$0\" --defaults; else backlog init \"$0\" --defaults --no-git; fi' '{{project}}'"
+	],
+	"hooks": {
+		"session-start": "backlog haren-hook session-start",
+		"after-plan": "backlog haren-hook after-plan",
+		"on-task-status": "backlog haren-hook on-task-status"
+	},
+	"config": {},
+	"skills": ["skills/haren-board"]
+}

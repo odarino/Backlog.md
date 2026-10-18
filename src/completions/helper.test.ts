@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Command } from "commander";
+import { extractCommandStructure } from "./command-structure.ts";
 import { getCompletions, parseCompletionContext } from "./helper.ts";
 
 describe("parseCompletionContext", () => {
@@ -119,5 +120,14 @@ describe("parseCompletionContext", () => {
 		const completions = await getCompletions(new Command(), line, line.length);
 
 		expect(completions).toEqual(["pwsh"]);
+	});
+});
+
+describe("extractCommandStructure", () => {
+	test("omits hidden commands", () => {
+		const program = new Command();
+		program.command("x", { hidden: true });
+		program.command("y");
+		expect(extractCommandStructure(program).subcommands.map((c) => c.name)).toEqual(["y"]);
 	});
 });
