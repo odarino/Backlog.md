@@ -1,6 +1,6 @@
 {
   "name": "@odarino/backlog.md",
-  "version": "1.57.1",
+  "version": "1.57.2",
   "type": "module",
   "module": "src/cli.ts",
   "files": [
