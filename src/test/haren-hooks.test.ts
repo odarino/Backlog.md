@@ -95,6 +95,12 @@ describe("after-plan robustness", () => {
 		const state = await loadState(env.dataDir);
 		expect(state.tasks["checkout/task-1-api"]).toBeDefined();
 		expect(state.tasks["checkout/task-2-ui"]).toBeDefined();
+		expect(r.messages.join("\n")).not.toContain("Could not set dependencies");
+		const apiId = state.tasks["checkout/task-1-api"]?.backlogId as string;
+		const uiId = state.tasks["checkout/task-2-ui"]?.backlogId as string;
+		expect(apiId).not.toBe(oldId);
+		const tasks = await core.filesystem.listTasks();
+		expect(tasks.find((t) => t.id === uiId)?.dependencies).toEqual([apiId]);
 	});
 	it("drops a removed task that is already gone from the board", async () => {
 		await runHarenHook(
