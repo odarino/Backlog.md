@@ -593,3 +593,14 @@ describe("duplicate task repair", () => {
 		expect(plan.blockedReasons.join("\n")).toContain("Reference scan could not read backlog/docs/unreadable.md");
 	});
 });
+
+describe("duplicate task repair with archived IDs", () => {
+	it("does not allocate an archived task ID to a repaired duplicate", async () => {
+		await writeTask(core.filesystem.tasksDir, "task-1 - Alpha.md", makeTask("TASK-1", "Alpha"));
+		await writeTask(core.filesystem.tasksDir, "task-1 - Beta.md", makeTask("TASK-1", "Beta"));
+		await writeTask(core.filesystem.archiveTasksDir, "task-2 - Archived.md", makeTask("TASK-2", "Archived"));
+
+		const plan = await core.previewDuplicateTaskIdRepair();
+		expect(plan.changes.map((change) => change.newId)).toEqual(["TASK-3"]);
+	});
+});
