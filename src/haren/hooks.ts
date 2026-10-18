@@ -15,6 +15,7 @@ import {
 
 export interface HookEnv {
 	root?: string;
+	harenDir?: string;
 	dataDir?: string;
 	configJson?: string;
 }
@@ -45,8 +46,15 @@ export async function runHarenHook(hook: string, payload: Record<string, unknown
 		throw new Error(`Unknown haren hook: ${hook}`);
 	}
 	if (!env.dataDir) return { messages: ["HAREN_PLUGIN_DATA is not set; update haren"], updates: [] };
-	const root = env.root;
-	if (!root || !(await hasBacklogProject(root))) {
+	// Monorepo layout keeps the project at the workspace root. Workspace layout keeps it in the haren folder.
+	let root: string | undefined;
+	for (const candidate of [env.root, env.harenDir]) {
+		if (candidate && (await hasBacklogProject(candidate))) {
+			root = candidate;
+			break;
+		}
+	}
+	if (!root) {
 		return { messages: ["No Backlog.md project found. Run 'backlog init' in the project root."], updates: [] };
 	}
 	const core = new Core(root);

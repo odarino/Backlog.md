@@ -23,6 +23,7 @@ export function registerHarenHookCommand(program: Command): void {
 				const { runHarenHook } = await import("../haren/hooks.ts");
 				const result = await runHarenHook(hook, payload, {
 					root: process.env.HAREN_ROOT,
+					harenDir: process.env.HAREN_DIR,
 					dataDir: process.env.HAREN_PLUGIN_DATA,
 					configJson: process.env.HAREN_PLUGIN_CONFIG,
 				});
