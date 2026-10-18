@@ -120,7 +120,7 @@ export async function runHarenHook(hook: string, payload: Record<string, unknown
 		try {
 			await core.updateTaskFromInput(id, { dependencies }, false);
 		} catch (error) {
-			// Core can refuse a dependency, for example when an archived task reuses the same ID.
+			// Core can refuse a dependency, for example when a dependency ID is ambiguous or invalid.
 			messages.push(`Could not set dependencies for ${key}: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
