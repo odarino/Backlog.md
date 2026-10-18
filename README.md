@@ -56,6 +56,32 @@ Homebrew and Nix install the upstream package, which does not have the fork feat
 - A repair push goes only to the existing upstream of the current branch. Backlog.md never force-pushes and never sets an upstream. If the pull before the second push has a conflict, Backlog.md aborts the pull and the commit stays local.
 - The web UI accepts only `http://127.0.0.1:<port>` and `http://localhost:<port>`. Access through a tunnel or a proxy is blocked.
 
+## Use with haren
+
+[haren](https://github.com/odarino/haren) is a planning framework for AI agents. This package is a haren plugin named `backlog`. The plugin keeps the haren plan and the Backlog.md board in sync.
+
+Install the plugin with `haren init --plugin backlog`. In an existing project, run `haren plugin add backlog`. haren then runs `backlog init` for you. It needs this package at version 1.57.2 or later.
+
+### Where the board is
+
+The board is always in `<haren folder>/backlog/`. The config file depends on the haren layout.
+
+| Layout | Config file | Run `backlog board` and `backlog browser` |
+|---|---|---|
+| monorepo | `backlog.config.yml` in the project root | Anywhere in the project |
+| workspace | `<haren folder>/backlog/config.yml` | Inside the haren folder |
+
+In the workspace layout, the haren folder is its own git repo. The config file is in that repo, so your team gets it when they clone the repo.
+
+### Sync rules
+
+- haren creates one task for each planned feature. The task has the label `haren:<module>/<feature>`. Do not remove this label.
+- haren owns the title, the description, and the dependencies. Change them in the haren plan. haren overwrites changes made on the board.
+- The board owns the status. Move a task on the board, and haren reads the change at the next session start. A status change in haren updates the board.
+- If a feature leaves the plan, haren archives its task.
+
+If you use Backlog.md without haren, nothing changes for you. The `haren-hook` command is hidden and internal. Do not run it yourself.
+
 ![Backlog demo GIF using: backlog board](./.github/backlog-v1.40.gif)
 
 

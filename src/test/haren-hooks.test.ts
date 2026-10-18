@@ -140,6 +140,45 @@ describe("project resolution", () => {
 		);
 		expect(r.messages[0]).toContain("No Backlog.md project found");
 	});
+	it("falls back to the haren folder when the root has no project", async () => {
+		const ws = join(dir, "ws");
+		const harenDir = join(ws, "haren");
+		await mkdir(harenDir, { recursive: true });
+		await initializeFilesystemTestProject(new Core(harenDir), "Shop");
+		const dataDir = join(dir, ".d5");
+		const r = await runHarenHook(
+			"after-plan",
+			plan([{ key: "task-1-api", title: "API", description: "x", dependencies: [] }]),
+			{ root: ws, harenDir, dataDir },
+		);
+		expect(r.messages.join("\n")).toContain("Synced 1 tasks for checkout");
+		const tasks = await new Core(harenDir).filesystem.listTasks();
+		expect(tasks.map((t) => t.title)).toEqual(["API"]);
+		expect(await Bun.file(join(ws, "backlog.config.yml")).exists()).toBe(false);
+	});
+	it("prefers the project at the root over the haren folder", async () => {
+		const harenDir = join(dir, "haren");
+		await mkdir(harenDir, { recursive: true });
+		await initializeFilesystemTestProject(new Core(harenDir), "Other");
+		const r = await runHarenHook(
+			"after-plan",
+			plan([{ key: "task-1-api", title: "API", description: "x", dependencies: [] }]),
+			{ root: dir, harenDir, dataDir: join(dir, ".d6") },
+		);
+		expect(r.messages.join("\n")).toContain("Synced 1 tasks");
+		expect((await core.filesystem.listTasks()).map((t) => t.title)).toEqual(["API"]);
+		expect(await new Core(harenDir).filesystem.listTasks()).toEqual([]);
+	});
+	it("reports no project when neither the root nor the haren folder has one", async () => {
+		const harenDir = join(dir, "empty", "haren");
+		await mkdir(harenDir, { recursive: true });
+		const r = await runHarenHook(
+			"session-start",
+			{ hook: "session-start" },
+			{ root: join(dir, "empty"), harenDir, dataDir: join(dir, ".d7") },
+		);
+		expect(r.messages[0]).toContain("No Backlog.md project found");
+	});
 	it("reports a missing root", async () => {
 		const r = await runHarenHook("session-start", { hook: "session-start" }, { dataDir: join(dir, ".d4") });
 		expect(r.messages[0]).toContain("No Backlog.md project found");

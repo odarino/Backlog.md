@@ -7,12 +7,22 @@ description: Use the Backlog.md board inside a haren project. Open the board, re
 
 haren syncs its planned features with Backlog.md tasks. Each synced task has the label `haren:<module>/<feature>`.
 
+## Find the board
+
+The board is always in `<haren folder>/backlog/`. The place of the config file depends on the haren layout.
+
+| Layout | Config file | Where to run `backlog` |
+|---|---|---|
+| monorepo | `backlog.config.yml` in the project root | Anywhere in the project |
+| workspace | `<haren folder>/backlog/config.yml` | Inside the haren folder |
+
+In the workspace layout, the haren folder is its own git repo. The config file is in that repo, so your team gets it when they clone the repo.
+
 ## Open the board
 
-The board is in `<haren folder>/backlog/`. The file `backlog.config.yml` in the workspace root points to it.
-
-- Terminal board: `backlog board`
-- Web board: `backlog browser`
+1. Go to the correct folder for your layout.
+2. Run `backlog board` for the terminal board.
+3. Run `backlog browser` for the web board.
 
 ## Rules
 
