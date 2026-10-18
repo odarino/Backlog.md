@@ -9,6 +9,8 @@ haren syncs its planned features with Backlog.md tasks. Each synced task has the
 
 ## Open the board
 
+The board is in `<haren folder>/backlog/`. The file `backlog.config.yml` in the workspace root points to it.
+
 - Terminal board: `backlog board`
 - Web board: `backlog browser`
 

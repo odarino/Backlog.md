@@ -5,12 +5,12 @@
 	"requires": [
 		{
 			"bin": "backlog",
-			"version": ">=1.57.0-0",
+			"version": ">=1.57.1-0",
 			"install": "npm i -g @odarino/backlog.md"
 		}
 	],
 	"setup": [
-		"sh -c 'if [ -f backlog/config.yml ] || [ -f backlog/config.yaml ] || [ -f .backlog/config.yml ] || [ -f .backlog/config.yaml ] || [ -f backlog.config.yml ] || [ -f backlog.json ]; then exit 0; fi; if git rev-parse --git-dir >/dev/null 2>&1; then backlog init \"$0\" --defaults; else backlog init \"$0\" --defaults --no-git; fi' '{{project}}'"
+		"sh -c 'if [ -f backlog/config.yml ] || [ -f backlog/config.yaml ] || [ -f .backlog/config.yml ] || [ -f .backlog/config.yaml ] || [ -f backlog.config.yml ] || [ -f backlog.json ] || [ -f \"$1/backlog/config.yml\" ] || [ -f \"$1/backlog/config.yaml\" ]; then exit 0; fi; if git rev-parse --git-dir >/dev/null 2>&1; then backlog init \"$0\" --backlog-dir \"$1/backlog\" --config-location root --agent-instructions none --defaults; else backlog init \"$0\" --backlog-dir \"$1/backlog\" --config-location root --agent-instructions none --defaults --no-git; fi' '{{project}}' '{{harenDir}}'"
 	],
 	"hooks": {
 		"session-start": "backlog haren-hook session-start",

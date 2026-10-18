@@ -16,6 +16,10 @@ describe("haren plugin package files", () => {
 		expect(m.setup[0]).toContain("--no-git");
 		expect(m.setup[0]).toContain("git rev-parse");
 		expect(m.setup[0]).toContain("{{project}}");
+		expect(m.setup[0]).toContain("{{harenDir}}");
+		expect(m.setup[0]).toContain('--backlog-dir "$1/backlog"');
+		expect(m.setup[0]).toContain("--config-location root");
+		expect(m.setup[0]).toContain("--agent-instructions none");
 		for (const s of m.skills) expect(existsSync(join(root, s, "SKILL.md"))).toBe(true);
 	});
 	it("ships the plugin files in npm and release builds", async () => {
