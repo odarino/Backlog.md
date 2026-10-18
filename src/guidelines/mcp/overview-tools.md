@@ -23,7 +23,7 @@ Mark finished work Done (or the configured final status). Leave it on the board 
 - `get_backlog_instructions`
 - `task_list`, `task_search`, `task_view`, `task_create`, `task_clone`, `task_edit`
 - `task_complete` — move finished work off the board to completed storage during periodic cleanup; preserves its record and dependency links
-- `task_archive` — archive canceled, duplicate, or invalid work; removes incoming dependencies and task references. Archived task IDs can be reused.
+- `task_archive` — archive canceled, duplicate, or invalid work; removes incoming dependencies and task references. Archived task IDs are never reused.
 - `task_list` and `task_search` accept configured task types with OR semantics; `task_search` also accepts `modifiedFiles` for case-insensitive substring filtering against project-root-relative modified file paths
 - `task_list` and `task_search` also accept configured `project` values with OR semantics for monorepo-style backlogs; the field is absent from both tool schemas when no `projects:` list is configured
 - `task_edit` accepts `commentsAppend` and optional `commentAuthor` to append task discussion or review comments

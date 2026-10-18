@@ -916,8 +916,8 @@ export class Core {
 	 * keeps its reference. Locking cannot close that on its own without a corpus-wide write lock,
 	 * and vacating before the scan does not close it either: an archived ID still resolves as a
 	 * dependency target by design, so the write that adds it is still accepted after the move.
-	 * The stale reference that results is not silent - it renders as an unknown task ID until the
-	 * allocator hands the number out again.
+	 * The stale reference that results is not silent - it renders as an unknown task ID. The
+	 * allocator never hands an archived number out again.
 	 */
 	private async withVacatedIdCleanup<T>(
 		target: Pick<Task, "id" | "filePath">,
@@ -1545,7 +1545,7 @@ export class Core {
 
 	/**
 	 * Gets all task IDs that are in use (active or completed) across all branches.
-	 * Respects cross-branch config settings. Archived IDs are excluded (can be reused).
+	 * Respects cross-branch config settings. Archived IDs are not in this list; getExistingIdsForType adds them so they are never reused.
 	 *
 	 * This is used for ID generation to determine the next available ID.
 	 */
@@ -1637,15 +1637,19 @@ export class Core {
 	 * Gets all existing IDs for a given entity type.
 	 * Used internally by generateNextId to determine the next available ID.
 	 *
-	 * Note: Archived tasks are intentionally excluded - archived IDs can be reused.
-	 * This makes archive act as a soft delete for ID purposes.
+	 * Note: Archived task IDs are included - archived IDs are never reused, so an
+	 * active task and an archived task can never share one ID.
 	 */
 	private async getExistingIdsForType(type: EntityType): Promise<string[]> {
 		switch (type) {
 			case EntityType.Task: {
-				// Get active + completed task IDs from all branches (respects config)
-				// Archived IDs are excluded - they can be reused (soft delete behavior)
-				return this.getActiveAndCompletedTaskIds();
+				// Get active + completed task IDs from all branches (respects config),
+				// plus archived task IDs - archived IDs are never reused.
+				const [activeAndCompleted, archived] = await Promise.all([
+					this.getActiveAndCompletedTaskIds(),
+					this.fs.listArchivedTasks(),
+				]);
+				return [...activeAndCompleted, ...archived.map((task) => task.id)];
 			}
 			case EntityType.Draft: {
 				// Occupancy includes filename-derived ids: an unparsable file still reserves its

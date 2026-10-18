@@ -378,12 +378,14 @@ export async function previewDuplicateTaskIdRepair(
 	const crossBranchFindings = options.includeBranches ? await findCrossBranchDuplicateTaskIds(core, snapshot) : [];
 	const blockedReasons: string[] = [];
 	const changes: DuplicateRepairChange[] = [];
-	const [activeTasks, completedTasks, config] = await Promise.all([
+	const [activeTasks, completedTasks, archivedTasks, config] = await Promise.all([
 		snapshot ? Promise.resolve(snapshot.activeTasks) : core.filesystem.listTasks(),
 		snapshot ? Promise.resolve(snapshot.completedTasks) : core.filesystem.listCompletedTasks(),
+		core.filesystem.listArchivedTasks(),
 		core.filesystem.loadConfig(),
 	]);
-	const existingIds = [...activeTasks, ...completedTasks].map((task) => task.id);
+	// Archived IDs are never reused, so a repair must not allocate one either.
+	const existingIds = [...activeTasks, ...completedTasks, ...archivedTasks].map((task) => task.id);
 	const plannedIds: string[] = [];
 
 	for (const group of groups) {

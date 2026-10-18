@@ -8,6 +8,7 @@ import { Command, type OptionValues } from "commander";
 import { runAdvancedConfigWizard } from "./commands/advanced-config-wizard.ts";
 import { type CompletionInstallResult, installCompletion, registerCompletionCommand } from "./commands/completion.ts";
 import { configureAdvancedSettings } from "./commands/configure-advanced-settings.ts";
+import { registerHarenHookCommand } from "./commands/haren-hook.ts";
 import {
 	addHelpSchema,
 	choiceType,
@@ -6079,6 +6080,9 @@ registerInstructionsCommand(program);
 
 // MCP command group
 registerMcpCommand(program);
+
+// Hidden command used by the haren plugin
+registerHarenHookCommand(program);
 
 program
 	.parseAsync(process.argv)
