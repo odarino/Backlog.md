@@ -109,7 +109,7 @@ describe("references to a vacated task ID", () => {
 
 		// Archived IDs are never reused, so the next task does not take the vacated slot.
 		const { task: unrelated } = await core.createTaskFromInput({ title: "Totally unrelated new task" });
-		expect(taskIdsEqual(unrelated.id, target.id)).toBe(false);
+		expect(unrelated.id).toBe("TASK-3");
 
 		const completedDependent = await loadCompleted(dependent.id);
 		expect(completedDependent?.dependencies ?? []).toEqual([]);
@@ -249,7 +249,7 @@ describe("references to a vacated task ID", () => {
 		}
 
 		const { task: unrelated } = await core.createTaskFromInput({ title: "Totally unrelated new task" });
-		expect(taskIdsEqual(unrelated.id, target.id)).toBe(false);
+		expect(unrelated.id).toBe("TASK-3");
 
 		const updated = await core.filesystem.loadTask(late.id);
 		expect(updated?.dependencies ?? []).toEqual([]);

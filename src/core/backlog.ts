@@ -1545,7 +1545,7 @@ export class Core {
 
 	/**
 	 * Gets all task IDs that are in use (active or completed) across all branches.
-	 * Respects cross-branch config settings. Archived IDs are excluded (can be reused).
+	 * Respects cross-branch config settings. Archived IDs are not in this list; getExistingIdsForType adds them so they are never reused.
 	 *
 	 * This is used for ID generation to determine the next available ID.
 	 */
