@@ -118,7 +118,8 @@ function extractConfigKeyYaml(content: string, key: string): string | undefined 
 			break;
 		}
 
-		collected.push(line);
+		// Strip the key's own indentation so the block parses as a top-level document (YAML rejects tab indentation).
+		collected.push(line.slice(Math.min(startIndent, indent)));
 	}
 
 	return collected.join("\n");

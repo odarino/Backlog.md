@@ -281,7 +281,9 @@ describe("CLI JSON watch", () => {
 		const launcher = await createLauncherInstall(join(directory, "launcher"), (path) =>
 			copyFile(process.execPath, path),
 		);
-		await expectWatchToEndWithItsStarter(["node", launcher, CLI, ...WATCH]);
+		// Version-manager shims (e.g. Volta) run node as a child; killing the shim would leave the launcher alive.
+		const node = Bun.spawnSync(["node", "-p", "process.execPath"]).stdout.toString().trim();
+		await expectWatchToEndWithItsStarter([node, launcher, CLI, ...WATCH]);
 	});
 
 	it("requires JSON and rejects invalid options without writing a snapshot", async () => {
